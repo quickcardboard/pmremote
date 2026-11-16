@@ -137,6 +137,10 @@ eq(P.evaluate(qb, P.DEFAULTS).map((f) => f.title), [], "LINQ: no alerts");
 const rm = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "romeo.txt"), "utf8"));
 eq([rm.counts.Tachy, rm.loopEp.Tachy.seconds, rm.loopEp.Tachy.vrate, rm.atrial_burden_percent, rm.patient.name], [1, 8, 222, 0, "TESTPATIENT2, ROMEO2"], "LINQ second example");
 
+const nameOf = (rows) => P.parse(["Device Serial Number: X1", "Quick Look Data From:", "01-Jan-2026 00:00 to 02-Jan-2026 00:00", "Reveal LINQ LNQ11", "Battery Status", "OK", "Transmission Schedule"].concat(rows).join("\n")).patient.name;
+eq([nameOf(["O'NEIL-SMITH, MARY ANN"]), nameOf(["Testpatient, Ángel"]), nameOf(["TESTPATIENT, SIERRA 2-Aug-1951 (75 yrs)"]), nameOf(["MC DONALD, JOHN A."])],
+  ["O'NEIL-SMITH, MARY ANN", "Testpatient, Ángel", "TESTPATIENT, SIERRA", "MC DONALD, JOHN A."], "CareLink names: mixed case, accents, date on the same line");
+
 // Alerts come from the daily value; N/R daily = no alert; low sensing within 20% of in-office = no alert
 const lead = (daily, office) => ({ chamber: "RV", daily: { amp: daily }, office: { amp: office } });
 const sense = (dl, of) => {

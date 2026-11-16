@@ -320,11 +320,20 @@ function episodeText(g, withRate) {
   return t + (withRate && g.vrate > 100 ? " at " + g.vrate + " BPM" : "");
 }
 
+// CareLink shows the patient as "LAST, FIRST" on the line after the "Transmission Schedule" menu item
+function carelinkName(L) {
+  var NAME = /^([\p{L}][\p{L}'\-. ]*\d*,\s*[\p{L}][\p{L}'\-. ]*\d*?)(?:\s+\d{1,2}-[A-Z][a-z]{2,3}-\d{4}.*)?$/u;
+  var t = L.findIndex(function (s) { return /^Transmission Schedule$/i.test(s); });
+  for (var i = t + 1; t >= 0 && i <= t + 2 && i < L.length; i++) { var m = L[i].match(NAME); if (m) return m[1].trim(); }
+  var any = L.filter(function (s) { return NAME.test(s) && !/:/.test(s); })[0];
+  return any ? any.match(NAME)[1].trim() : null;
+}
+
 function parseCarelink(text) {
   var L = lines(text), J = L.join("\n");
   var grab = function (re) { var m = J.match(re); return m ? m[1].trim() : null; };
   var d = { source: "CareLink", device: {}, patient: {}, leads: [], episodes: [], device_alerts: [], device_notes: [], pacing_percent: {}, battery: {}, tags: [] };
-  d.patient.name = (L.filter(function (s) { return /^[A-Z][A-Z'\- ]*, [A-Z][A-Z'\-. ]*$/.test(s); })[0]) || null;
+  d.patient.name = carelinkName(L);
   var dev = grab(/Device:\s*([^\n]+)/i);
   if (dev) d.device.model = dev.replace(/™/g, "").replace(/\s+/g, " ");
   d.device.serial = grab(/Serial Number:\s*(\S+)/i);
@@ -442,7 +451,7 @@ function parseLinq(text) {
   var L = lines(text), J = L.join("\n");
   var grab = function (re) { var m = J.match(re); return m ? m[1].trim() : null; };
   var d = { source: "CareLink", loop: true, device: {}, patient: {}, leads: [], episodes: [], device_alerts: [], device_notes: [], pacing_percent: {}, battery: {}, tags: [], loopEp: {} };
-  d.patient.name = (L.filter(function (s) { return /^[A-Z][A-Z'\- ]*\d*, [A-Z][A-Z'\-. ]*\d*$/.test(s); })[0]) || null;
+  d.patient.name = carelinkName(L);
   d.device.model = (L.filter(function (s) { return /^(Reveal|LINQ)\b.*\b[A-Z]{3}\d+\s*$/i.test(s); })[0] || "Reveal LINQ").replace(/™/g, "").replace(/\s+/g, " ");
   d.device.serial = grab(/Serial Number:\s*(\S+)/i);
   var qr = J.match(new RegExp("Quick Look Data From:\\s*(" + MDATE + "(?: \\d{1,2}:\\d{2})?)\\s*to\\s*(" + MDATE + "(?: \\d{1,2}:\\d{2})?)", "i"));
@@ -490,7 +499,7 @@ function loopTemplate(d) {
   var out = ["Remote transmission received due to " + sel("reason", LOOP_REASONS, "manual transmission.")], ev = [];
   if (c.Symptom) ev.push(c.Symptom + " symptom related " + (c.Symptom === 1 ? "event" : "events") + ' recorded. <input type="text" class="fill-input w-long" data-k="symptoms" value="No symptoms reported">');
   if (c.Tachy) ev.push(c.Tachy + " tachy " + (c.Tachy === 1 ? "episode" : "episodes") + " noted" + up("Tachy", true));
-  if (c.Pause) ev.push(c.Pause + " " + (c.Pause === 1 ? "Pause" : "Pauses") + " noted" + up("Pause", false));
+  if (c.Pause) ev.push(c.Pause + " " + (c.Pause === 1 ? "pause" : "pauses") + " noted" + up("Pause", false));
   if (c.Brady) ev.push(c.Brady + " brady " + (c.Brady === 1 ? "episode" : "episodes") + " noted" + up("Brady", true));
   if (c.AT) ev.push(c.AT + " AT " + (c.AT === 1 ? "episode" : "episodes") + up("AT", false));
   if (c.AF) ev.push(c.AF + " AF " + (c.AF === 1 ? "episode" : "episodes") + up("AF", false));
@@ -643,7 +652,7 @@ function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function 
 function render(host, d, T, opt) {
   opt = opt || {};
   T = Object.assign({}, DEFAULTS, T || {});
-  var flags = d.recognised ? evaluate(d, T) : [];
+  var flags = d.recognised && !d.loop ? evaluate(d, T) : [];
   var crit = flags.filter(function (f) { return f.level === "critical"; }).length, warn = flags.filter(function (f) { return f.level === "warn"; }).length;
   var vcls = crit ? "v-crit" : warn ? "v-warn" : "v-ok";
   var vtxt = !d.recognised ? "This doesn't look like a LATITUDE Summary or CareLink Current Status page." : crit ? crit + " critical, " + warn + " to review" : warn ? warn + " to review" : "Nothing out of range";
@@ -665,7 +674,7 @@ function render(host, d, T, opt) {
     '<div class="top"><div><div class="dev">' + esc(d.device.model || "Unknown device") + (d.device.mode ? " · " + esc(d.device.mode) : "") + '</div>' +
     '<div class="sub">' + esc([d.patient.name, d.device.serial ? "SN " + d.device.serial : "", d.measured ? (d.source === "CareLink" ? "Interrogated " : "Daily ") + d.measured : "", d.tags.length ? "Tags: " + d.tags.join(" ") : ""].filter(Boolean).join(" · ")) + '</div></div>' +
     (opt.onClose ? '<button class="x" data-a="close" aria-label="Close">×</button>' : "") + '</div>' +
-    '<div class="verdict ' + vcls + '">' + esc(vtxt) + '</div>' +
+    (d.loop && d.recognised ? "" : '<div class="verdict ' + vcls + '">' + esc(vtxt) + '</div>') +
     (flags.length ? "<ul>" + flags.map(function (f) {
       return '<li><span class="pill ' + f.level + '">' + (f.level === "critical" ? "Critical" : f.level === "warn" ? "Review" : "Note") + '</span><span>' + esc(f.title) + '<span class="rule">' + esc(f.rule) + "</span></span></li>";
     }).join("") + "</ul>" : "") +
