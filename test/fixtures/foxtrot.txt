@@ -1,0 +1,23 @@
+Patient: TESTPATIENT, FOXTROT
+Device: L331 ACCOLADE MRI EL/900031
+Search Tags: DH
+Leads (View detail)
+Most Recent Daily Measurement (14 Nov 2026)	Most Recent In-Office Measurement (12 Nov 2026)
+Atrial
+Intrinsic Amplitude	5.8 mV	3.1 mV
+Pace Impedance	664 Ω	648 Ω
+Pace Threshold	N/R	0.5 V @ 0.4 ms
+Ventricular
+Intrinsic Amplitude	17.5 mV	14.4 mV
+Pace Impedance	586 Ω	581 Ω
+Pace Threshold	0.6 V @ 0.4 ms	Auto 0.8 V @
+0.4 ms
+Battery
+Approximate time to explant: 10 years from 15 Nov 2026
+Health (View detail)
+Most Recent Daily Measurement (15 Nov 2026)
+Percent Paced
+Atrial	2 %
+Ventricular	31 %
+Settings
+Mode	DDDR

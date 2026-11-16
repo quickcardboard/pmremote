@@ -69,6 +69,13 @@ function parseLatitude(text) {
   var LAB = [["intrinsic amplitude", "amp"], ["pace impedance", "imp"], ["pace threshold", "thr"], ["shock impedance", "shock"], ["high voltage impedance", "shock"]];
   var isVal = function (s) { return /^(\(|N\/R|Auto\b|[<>]?\s*\d|@|ms\b)/i.test(s); };
   var chamber = null, leads = {}, order = [];
+  // Column order follows the page text, not the screen: LATITUDE can store the Daily column first and
+  // display it on the right. Use the order of the two headings just before the first lead row.
+  var firstRow = J.search(/\n(Intrinsic Amplitude|Pace Impedance|Pace Threshold)\b/i);
+  var head = firstRow > 0 ? J.slice(0, firstRow) : J;
+  var lastIdx = function (re) { var m, i = -1, g = new RegExp(re.source, "gi"); while ((m = g.exec(head))) i = m.index; return i; };
+  var officeAt = lastIdx(/In-?\s*Office\s+Measurement/), dailyAt = lastIdx(/Daily\s+Measurement/);
+  d.daily_first = officeAt >= 0 && dailyAt >= 0 && dailyAt < officeAt;
   for (var k = 0; k < L.length; k++) {
     var line = L[k].replace(/^[^A-Za-z(]+/, "");
     var low = line.toLowerCase();
@@ -88,7 +95,7 @@ function parseLatitude(text) {
     var kind = lab[1] === "shock" ? "imp" : lab[1];
     var cells = readCells(clean, kind);
     ld.office = ld.office || {}; ld.daily = ld.daily || {};
-    if (cells.length >= 2) { ld.office[kind] = cells[0]; ld.daily[kind] = cells[1]; }
+    if (cells.length >= 2) { ld.office[kind] = cells[d.daily_first ? 1 : 0]; ld.daily[kind] = cells[d.daily_first ? 0 : 1]; }
     else if (cells.length === 1) ld.daily[kind] = cells[0];
   }
   Object.keys(leads).forEach(function (c) {
