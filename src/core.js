@@ -311,6 +311,7 @@ var CSS = [
   ".pmr button.b{font:inherit;font-size:15px;padding:7px 14px;border-radius:6px;border:1px solid #d6dee2;background:#fff;cursor:pointer;color:#17232b}",
   ".pmr button.b.p{background:#0f5e7a;border-color:#0f5e7a;color:#fff;font-weight:600}",
   ".pmr button.b:focus-visible,.pmr select:focus-visible,.pmr input:focus-visible{outline:2px solid #0f5e7a;outline-offset:2px}",
+  ".pmr .ini{display:flex;align-items:center;gap:8px;font-size:15px;color:#5a6b75}",
   ".pmr .msg{font-size:14px;color:#1f7a4a}.pmr .msg.err{color:#b4232c}",
   ".pmr .tw{overflow-x:auto}.pmr table{border-collapse:collapse;font-size:15px;width:100%}.pmr td,.pmr th{padding:4px 6px;border-bottom:1px solid #eef1f3;text-align:left;white-space:nowrap}",
   ".pmr th{color:#5a6b75;font-weight:500}.pmr tr.hd th{font-size:12px}.pmr .cur{color:#0b5fa5;font-weight:700}.pmr .old{color:#7a8a94;font-weight:400}",
@@ -348,6 +349,7 @@ function render(host, d, T, opt) {
       return '<li><span class="pill ' + f.level + '">' + (f.level === "critical" ? "Critical" : f.level === "warn" ? "Review" : "Note") + '</span><span>' + esc(f.title) + '<span class="rule">' + esc(f.rule) + "</span></span></li>";
     }).join("") + "</ul>" : "") +
     (d.recognised ? '<div class="text-block" contenteditable="true" spellcheck="false">' + template(d, flags, T) + '</div>' : "") +
+    (d.recognised ? '<label class="ini">Tech initials <input type="text" class="fill-input w-short" data-k="initials" maxlength="12" autocomplete="off"></label>' : "") +
     '<div class="btns"><button class="b p" data-a="copy">Copy report</button>' +
     (d.patient.name ? '<button class="b" data-a="name">Copy name</button>' : "") +
     (d.device.serial ? '<button class="b" data-a="serial">Copy serial</button>' : "") +
@@ -360,6 +362,12 @@ function render(host, d, T, opt) {
     "</div></div>";
 
   var q = function (k) { return host.querySelector('[data-k="' + k + '"]'); };
+  // Tech initials: remembered in this browser, pasted under the report after a blank line
+  var iniEl = q("initials");
+  if (iniEl) {
+    try { iniEl.value = localStorage.getItem("pmr.initials") || ""; } catch (e) {}
+    iniEl.addEventListener("input", function () { try { localStorage.setItem("pmr.initials", iniEl.value.trim()); } catch (e) {} });
+  }
   var msg = function (t, err) { var m = q("msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); };
   host.querySelector(".pmr").addEventListener("click", function (e) {
     var a = e.target.getAttribute && e.target.getAttribute("data-a");
@@ -367,7 +375,8 @@ function render(host, d, T, opt) {
     if (a === "close") return opt.onClose();
     if (a === "copy") {
       if (!d.recognised) return;
-      copy(host, reportText(host.querySelector(".text-block")), function (ok) { msg(ok ? "Report copied." : "Copy failed: select the report text and press Ctrl+C.", !ok); });
+      var ini = (q("initials") && q("initials").value.trim()) || "";
+      copy(host, reportText(host.querySelector(".text-block")) + (ini ? "\n\n" + ini : ""), function (ok) { msg(ok ? "Report copied." : "Copy failed: select the report text and press Ctrl+C.", !ok); });
     }
     if (a === "name") copy(host, d.patient.name, function (ok) { msg(ok ? "Name copied for the Paceart search." : "Copy failed.", !ok); });
     if (a === "serial") copy(host, d.device.serial, function (ok) { msg(ok ? "Serial copied for the Paceart search." : "Copy failed.", !ok); });
