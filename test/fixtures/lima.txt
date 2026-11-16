@@ -1,0 +1,127 @@
+CareLink Network
+Clinic:
+CDN - JPOC
+Search patients
+Active Transmissions
+Reports List
+Export Status
+Summary Reports
+Advanced Search
+Transmission Schedule
+TESTPATIENT, LIMA
+01-Jan-1960
+(66 yrs)
+Evera MRI™ S DR
+(28-May-2018)
+Viewed
+Current Status
+Current Report
+Quick Look II
+Current EGM
+Episodes
+More Reports
+Comments and Notes
+History
+Device: Evera MRI™ S DR DDMC3D4
+Serial Number: TST900081S
+Date of Interrogation: 16-Nov-2026 03:35:23
+Clinical Status
+Since 17-Aug-2026
+Treated
+VF
+0
+FVT
+0
+VT
+0
+AT/AF(Monitor)
+Monitored
+VT (150-162 bpm)
+0
+VT-NS (>4 beats, >162 bpm)
+2
+High Rate-NS
+0
+SVT: VT/VF Rx Withheld
+0
+V. Oversensing-TWave Rx Withheld
+0
+V. Oversensing-Noise Rx Withheld
+0
+AT/AF
+0
+Time in AT/AF
+<0.1 hr/day (<0.1%)
+Functional
+Last Week
+Patient Activity
+1.0 hr/day
+Cardiac Compass Trends (Sep-2025 to Nov-2026)
+Report chart.
+Therapy Summary
+VT/VF
+AT/AF
+Pace-Terminated Episodes
+0
+0
+Shock-Terminated Episodes
+0
+0
+Total Shocks
+0
+0
+Aborted Charges
+0
+0
+Pacing
+(% of Time Since 17-Aug-2026)
+Total VP
+< 0.1%
+(MVP On)
+AS-VS
+98.7%
+AS-VP
+< 0.1%
+AP-VS
+1.3%
+AP-VP
+< 0.1%
+OBSERVATIONS (4)
+· Patient Activity less than 1 hr/day for 1 weeks.
+Device Status (Implanted: 28-May-2018)
+Remaining Longevity
+20 months
+(16-Nov-2026)
+Report chart.
+(based on initial interrogation)
+Atrial(4076)
+RV(6935M)
+Pacing Impedance
+380 ohms
+342 ohms
+Defibrillation Impedance
+RV=70 ohms
+Capture Threshold
+0.625 V @ 0.40 ms
+0.750 V @ 0.40 ms
+Measured On
+16-Nov-2026
+14-Nov-2026
+Measured P/ R Wave
+2.0 mV
+8.9 mV
+Parameter Summary
+Mode
+AAI<=>DDD
+Lower Rate
+60 bpm
+Detection
+Rates
+Therapies
+AT/AF
+Monitor
+>171 bpm
+All Rx Off
+VF
+On
+>200 bpm

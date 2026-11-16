@@ -1,0 +1,115 @@
+CareLink Network
+Clinic:
+CDN - JPOC
+Search patients
+Active Transmissions
+Reports List
+Export Status
+Summary Reports
+Advanced Search
+Transmission Schedule
+TESTPATIENT, KILO D
+01-Jan-1940
+Viewed
+Current Status
+Current Report
+Quick Look II
+Current EGM
+Episodes
+More Reports
+Comments and Notes
+History
+Device: Azure™ S DR MRI W3DR01
+Serial Number: TST900071G
+Date of Interrogation: 16-Nov-2026 09:55:08
+Arrhythmia
+List
+Arrhythmia Episodes with EGM since: 11-May-2026
+Non-sustained VT
+Episodes: 2
+With EGM: 2
+Time
+Duration
+Avg bpm A/V
+Full EGM
+Type
+ID#
+Date
+hh:mm
+hh:mm:ss
+View
+Print
+VT-NS
+#31
+10-Oct-2026
+10:53
+:01
+174/226
+Report chart.
+VT-NS
+#30
+08-Jul-2026
+14:58
+:01
+133/158
+Report chart.
+Monitored AT/AF
+Episodes: 7
+With EGM: 7
+Time
+Duration
+Avg bpm A/V
+Type
+ID#
+Date
+hh:mm
+hh:mm:ss
+AT/AF
+#29
+15-May-2026
+00:00
+24:17:18
+357/81
+Report chart.
+AT/AF
+#28
+14-May-2026
+22:53
+:28
+171/81
+Report chart.
+AT/AF
+#27
+13-May-2026
+07:53
+:01:21
+353/108
+Report chart.
+AT/AF
+#26
+13-May-2026
+00:54
+:32
+212/87
+Report chart.
+AT/AF
+#25
+13-May-2026
+00:07
+:23
+72/77
+Report chart.
+AT/AF
+#24
+12-May-2026
+23:52
+:52
+233/90
+Report chart.
+AT/AF
+#23
+11-May-2026
+09:46
+:01:35
+326/127
+Report chart.

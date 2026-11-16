@@ -1,0 +1,97 @@
+CareLink Network
+Clinic:
+CDN - JPOC
+Search patients
+Active Transmissions
+Reports List
+Export Status
+Summary Reports
+Advanced Search
+Transmission Schedule
+TESTPATIENT, KILO D
+01-Jan-1940
+(86 yrs)
+Azure™ S DR MRI
+(26-Jan-2026)
+MyCareLink Home™ 26900
+Total Sends
+Next Send:
+None
+Visit ID:
+NONE
+Viewed
+Current Status
+Current Report
+Quick Look II
+Current EGM
+Episodes
+More Reports
+Comments and Notes
+History
+Device: Azure™ S DR MRI W3DR01
+Serial Number: TST900071G
+Date of Interrogation: 16-Nov-2026 09:55:08
+Clinical Status
+Since 11-May-2026
+Monitored
+VT (>4 beats)
+2
+Fast A&V
+0
+AT/AF
+7
+Time in AT/AF
+0.1 hr/day (0.5%)
+Pacing
+(% of Time Since 11-May-2026)
+VP
+0.3%
+(MVP On)
+AP
+22.7%
+OBSERVATIONS (1)
+· RV Capture Management: Actual safety margin (5.3 X) > programmed margin (2.0 X).
+History: Frequent 2° or 3° AV Block
+Device Status (Implanted: 26-Jan-2026)
+Remaining Longevity
+13.7 years
+(16-Nov-2026)
+Report chart.
+(based on initial interrogation)
+Atrial(4470)
+RV(4471)
+Lead Impedance
+513 ohms
+456 ohms
+Capture Threshold
+0.500 V @ 0.40 ms
+0.375 V @ 0.40 ms
+Measured On
+16-Nov-2026
+16-Nov-2026
+Programmed Amplitude/Pulse Width
+1.50 V / 0.40 ms
+2.00 V / 0.40 ms
+Measured P/ R Wave
+3.1 mV
+13.8 mV
+Programmed Sensitivity
+0.30 mV
+0.90 mV
+Parameter Summary
+Mode
+AAI<=>DDD
+Lower Rate
+60 bpm
+Paced AV
+180 ms
+Mode Switch
+171 bpm
+Detection
+Rates
+AT/AF
+Monitor
+>171 bpm
+VT
+Monitor
+>150 bpm

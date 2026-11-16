@@ -238,6 +238,147 @@ function singleChamber(mode) {
   return /^A(AI|OO|AT)/.test(mode || "") ? "RA" : /^V(VI|OO|VT)/.test(mode || "") ? "RV" : null;
 }
 
+/* ---------------- Medtronic CareLink ---------------- */
+var MDATE = "\\d{1,2}-[A-Z][a-z]{2,3}-\\d{4}";
+
+// "<0.1%" -> {v: 0.1, op: "<"}
+function pct(s) { var m = String(s || "").match(/([<>]?)\s*(\d+(?:\.\d+)?)\s*%/); return m ? { v: +m[2], op: m[1] } : null; }
+
+// Duration cell from the Episodes list: ":01" = 1 s, ":01:21" = 81 s, "24:17:18" = 24 h 17 min 18 s
+function cellSeconds(s) {
+  if (!/^\d*:\d{2}(?::\d{2})?$/.test(s)) return null;
+  return s.split(":").reduce(function (a, v) { return a * 60 + (+v || 0); }, 0);
+}
+
+// Episodes tab: longest Monitored AT/AF episode. Rows read Type, ID#, date, time, duration.
+function parseCarelinkEpisodes(L) {
+  var best = null, n = 0;
+  for (var i = 1; i + 3 < L.length; i++) {
+    if (!/^#\d+$/.test(L[i]) || !/^(AT\/AF|AT|AF)$/i.test(L[i - 1])) continue;
+    if (!new RegExp("^" + MDATE + "$").test(L[i + 1])) continue;
+    var sec = cellSeconds(L[i + 3]);
+    if (sec == null) continue;
+    n++;
+    if (best == null || sec > best) best = sec;
+  }
+  return n ? { longest_seconds: best, listed: n } : null;
+}
+
+function parseCarelink(text) {
+  var L = lines(text), J = L.join("\n");
+  var grab = function (re) { var m = J.match(re); return m ? m[1].trim() : null; };
+  var d = { source: "CareLink", device: {}, patient: {}, leads: [], episodes: [], device_alerts: [], device_notes: [], pacing_percent: {}, battery: {}, tags: [] };
+  d.patient.name = (L.filter(function (s) { return /^[A-Z][A-Z'\- ]*, [A-Z][A-Z'\-. ]*$/.test(s); })[0]) || null;
+  var dev = grab(/Device:\s*([^\n]+)/i);
+  if (dev) d.device.model = dev.replace(/™/g, "").replace(/\s+/g, " ");
+  d.device.serial = grab(/Serial Number:\s*(\S+)/i);
+  d.interrogated = grab(new RegExp("Date of Interrogation:\\s*(" + MDATE + ")", "i"));
+  d.since_reset = grab(new RegExp("Clinical Status\\s+Since\\s+(" + MDATE + ")", "i"));
+  d.measured = d.interrogated;
+  d.site = "JPOCSC"; d.siteChoice = true;           // Medtronic: JPOCSC unless changed
+  var mi = L.findIndex(function (s, i) { return s === "Mode" && i > L.findIndex(function (x) { return /^Parameter Summary$/i.test(x); }); });
+  d.device.mode = mi >= 0 && L[mi + 1] ? L[mi + 1].replace(/\s+/g, "") : null;
+  d.icd = /Defibrillation Impedance|Therapy Summary|^Treated$/im.test(J);
+
+  // Clinical Status counters: "label" then a number on the next line, split into Treated and Monitored
+  var cs = L.findIndex(function (s) { return /^Clinical Status$/i.test(s); });
+  var ce = L.findIndex(function (s, i) { return i > cs && /^(Functional|Pacing|Therapy Summary|OBSERVATIONS|Device Status)\b/i.test(s); });
+  var block = "", counts = { treated: {}, monitored: {} };
+  for (var i = cs + 1; cs >= 0 && i < (ce > 0 ? ce : L.length) - 1; i++) {
+    if (/^Treated$/i.test(L[i])) { block = "treated"; continue; }
+    if (/^Monitored$/i.test(L[i])) { block = "monitored"; continue; }
+    if (block && /^\d+$/.test(L[i + 1]) && !/^\d+$/.test(L[i])) counts[block][L[i]] = +L[i + 1];
+    if (/^Time in AT\/AF$/i.test(L[i])) { var b = pct(L[i + 1]); if (b) { d.atrial_burden_percent = b.v; d.atrial_burden_op = b.op; } }
+  }
+  var sum = function (o, re) { return Object.keys(o).filter(function (k) { return re.test(k); }).reduce(function (a, k) { return a + o[k]; }, 0); };
+  var M = counts.monitored;
+  var vhr = sum(M, /^(VT\b|VT-NS|High Rate-NS|Fast A&V)/i), svt = sum(M, /^SVT\b/i), ahr = sum(M, /^AT\/AF$/i);
+  var over = sum(M, /Oversensing/i);
+  if (vhr) d.episodes.push({ type: "VT", count: vhr, label: "VHR episodes" });
+  if (svt) d.episodes.push({ type: "SVT", count: svt, label: "SVT episodes" });
+  if (ahr) d.episodes.push({ type: "AHR", count: ahr, label: "AT/AF episodes" });
+  d.oversensing = over;
+  d.treated = sum(counts.treated, /^(VF|FVT|VT)$/i);
+
+  // Therapy Summary: label, then the VT/VF and AT/AF columns
+  var row = function (re) {
+    var k = L.findIndex(function (s) { return re.test(s); });
+    if (k < 0) return 0;
+    var t = 0; for (var j = k + 1; j <= k + 2 && j < L.length && /^\d+$/.test(L[j]); j++) t += +L[j];
+    return t;
+  };
+  if (d.icd) {
+    d.therapies_delivered = row(/^Pace-Terminated Episodes$/i) + row(/^Shock-Terminated Episodes$/i) + row(/^Total Shocks$/i);
+    d.aborted_charges = row(/^Aborted Charges$/i);
+  }
+
+  // Pacing %
+  var pv = function (re) { var k = L.findIndex(function (s) { return re.test(s); }); return k >= 0 ? pct(L[k + 1]) : null; };
+  var vp = pv(/^(Total VP|VP)$/), ap = pv(/^AP$/), apvs = pv(/^AP-VS$/), apvp = pv(/^AP-VP$/);
+  if (vp) d.pacing_percent.ventricular = vp.op === "<" ? 0 : vp.v;
+  if (ap) d.pacing_percent.atrial = ap.v;
+  else if (apvs || apvp) d.pacing_percent.atrial = Math.round(((apvs ? apvs.v : 0) + (apvp ? apvp.v : 0)) * 10) / 10;
+
+  // Battery
+  var bl = L.findIndex(function (s) { return /^Remaining Longevity$/i.test(s); });
+  var bm = bl >= 0 ? String(L[bl + 1]).match(/([<>]?\s*\d+(?:\.\d+)?)\s*(years?|months?)/i) : null;
+  if (bm) {
+    var mo = /^month/i.test(bm[2]);
+    d.battery.years = Math.round(num(bm[1]) / (mo ? 12 : 1) * 10) / 10;
+    d.battery.text = num(bm[1]) + (mo ? " months" : " years");
+  }
+  if (/\b(RRT|ERI|EOS)\b/.test(J.slice(J.search(/Device Status/i)))) d.battery.status = "RRT";
+
+  // Leads: chamber headings "Atrial(4470)" "RV(4471)", then one value per chamber on each row
+  var CHM = { atrial: "RA", ra: "RA", rv: "RV", lv: "LV", "right ventricular": "RV", "left ventricular": "LV" };
+  var hk = L.findIndex(function (s) { return /^(Atrial|RA|RV|LV)\s*\([^)]*\)$/i.test(s); });
+  var chambers = [];
+  for (var h = hk; hk >= 0 && h < L.length && /^(Atrial|RA|RV|LV)\s*\([^)]*\)$/i.test(L[h]); h++) chambers.push(CHM[L[h].replace(/\s*\(.*$/, "").toLowerCase()]);
+  var leads = chambers.map(function (c) { return { chamber: c, daily: {}, office: {} }; });
+  var take = function (re, kind) {
+    var k = L.findIndex(function (s, x) { return x > hk && re.test(s); });
+    if (k < 0) return;
+    var j = k + 1;
+    leads.forEach(function (ld) {
+      var t = L[j] || "", cell;
+      if (/^(--+|N\/?A|N\/R)$/i.test(t)) { j++; ld.daily[kind] = null; return; }
+      if (kind === "imp") cell = t.match(/^([<>]?)\s*(\d+(?:\.\d+)?)\s*ohms?$/i);
+      else if (kind === "amp") cell = t.match(/^([<>]?)\s*(\d+(?:\.\d+)?)\s*mV$/i);
+      else cell = t.match(/^(\d+(?:\.\d+)?)\s*V\s*@\s*(\d+(?:\.\d+)?)\s*ms$/i);
+      if (!cell) return;               // empty cell: leave this chamber without a value
+      j++;
+      ld.daily[kind] = kind === "thr" ? { v: +cell[1], pw: +cell[2] } : { v: +cell[2], op: cell[1] };
+    });
+  };
+  if (hk >= 0) {
+    take(/^(Lead|Pacing) Impedance$/i, "imp");
+    take(/^Capture Threshold$/i, "thr");
+    take(/^Measured P\s*\/\s*R Wave$/i, "amp");
+  }
+  leads.forEach(function (l) {
+    if (l.daily.amp) { l.amplitude_mv = l.daily.amp.v; l.amplitude_op = l.daily.amp.op; }
+    if (l.daily.imp) l.impedance_ohm = l.daily.imp.v;
+    if (l.daily.thr) { l.threshold_v = l.daily.thr.v; l.threshold_pw_ms = l.daily.thr.pw; }
+  });
+  // Defibrillation impedance "RV=70 ohms" (possibly also "SVC=..."): one HV entry per coil
+  var di = L.findIndex(function (s) { return /^Defibrillation Impedance$/i.test(s); });
+  if (di >= 0) {
+    var re = /([A-Z]+)\s*=\s*([<>]?)\s*(\d+)\s*ohms?/gi, m, seg = L.slice(di + 1, di + 3).join(" ");
+    while ((m = re.exec(seg))) leads.push({ chamber: "HV", coil: m[1].toUpperCase(), impedance_ohm: +m[3], daily: { imp: { v: +m[3], op: m[2] } }, office: {} });
+  }
+  d.leads = leads;
+
+  // Longest AT/AF from the Episodes tab, when that text is here too (pasted together)
+  var epi = parseCarelinkEpisodes(L);
+  if (epi) { d.ahr_longest = fmtDur(epi.longest_seconds); d.ahr_longest_listed = epi.listed; }
+  d.episodes_page = /Arrhythmia Episodes with EGM/i.test(J) && !/Remaining Longevity/i.test(J);
+  d.recognised = d.leads.length > 0 || d.battery.years != null;
+  return d;
+}
+
+function isCarelink(text) { return /Date of Interrogation/i.test(text) && /Serial Number/i.test(text); }
+function parse(text) { return isCarelink(text) ? parseCarelink(text) : parseLatitude(text); }
+
 /* ---------------- Rules ---------------- */
 
 function evaluate(d, T) {
@@ -250,7 +391,7 @@ function evaluate(d, T) {
   (d.leads || []).forEach(function (l) {
     var ch = l.chamber, hv = ch === "HV", lo = hv ? 20 : T.impLow, hi = hv ? 150 : T.impHigh;
     var z = l.impedance_ohm, zp = l.previous_impedance_ohm;
-    if (z != null && (z < lo || z > hi)) add("critical", ch + " impedance " + z + " Ω", "Outside " + lo + "–" + hi + " Ω", "imp");
+    if (z != null && (z < lo || z > hi)) add("critical", (hv && l.coil ? "HV (" + l.coil + ")" : ch) + " impedance " + z + " Ω", "Outside " + lo + "–" + hi + " Ω", "imp");
     if (z != null && zp) {
       var pct = Math.round(Math.abs(z - zp) / zp * 100);
       if (pct > T.impChangePct) add("warn", ch + " impedance " + (z > zp ? "rose" : "fell") + " " + zp + " → " + z + " Ω (" + pct + "%)", "Change > " + T.impChangePct + "% since last check", "imp");
@@ -267,7 +408,11 @@ function evaluate(d, T) {
       add("warn", ch + " threshold " + tv + " V @ " + l.threshold_pw_ms + " ms" + (tp != null ? " (last check " + tp + " V)" : ""),
         "> " + T.thrMax + " V and not within " + T.thrDelta + " V of last check", "sense");
   });
-  if (!d.site) add("warn", "No clinic in search tags", "Expected one of " + SITES.join(", ") + (d.tags.length ? "; tags: " + d.tags.join(" ") : ""), "site");
+  if (d.oversensing) add("warn", d.oversensing + " oversensing episode" + (d.oversensing === 1 ? "" : "s") + " (Rx withheld)", "T-wave or noise oversensing", "over");
+  if (d.treated) add("critical", d.treated + " treated VT/VF episode" + (d.treated === 1 ? "" : "s"), "Treated VF/FVT/VT counters", "therapy");
+  if (d.source === "CareLink" && d.therapies_delivered) add("critical", "Therapy delivered (" + d.therapies_delivered + ")", "Pace- or shock-terminated episodes or shocks", "therapy");
+  if (d.aborted_charges) add("warn", d.aborted_charges + " aborted charge" + (d.aborted_charges === 1 ? "" : "s"), "Therapy Summary", "therapy");
+  if (!d.site && d.source !== "CareLink") add("warn", "No clinic in search tags", "Expected one of " + SITES.join(", ") + (d.tags.length ? "; tags: " + d.tags.join(" ") : ""), "site");
   if (d.atrial_burden_percent != null && d.atrial_burden_op !== "<" && d.atrial_burden_percent > T.burdenWarn) add("warn", "AT/AF burden " + d.atrial_burden_op + d.atrial_burden_percent + "%", "> " + T.burdenWarn + "%", "burden");
   (d.device_notes || []).forEach(function (s) { add("warn", s, "Device message", "note"); });
   var o = { critical: 0, warn: 1, info: 2 };
@@ -306,21 +451,24 @@ function template(d, flags, T) {
   var svt = by(["SVT"]);
   if (svt) ep.push(row(svt, "SVT", "svt"));
   var ahr = by(["AHR"]);
-  if (ahr) ep.push(ahr + " AHR " + (ahr === 1 ? "episode" : "episodes") + " noted, longest episode lasting " + val(d.ahr_longest, "ahr-longest", "duration"));
-  if (d.therapies_delivered) ep.push('<span class="nw">' + pl(d.therapies_delivered, "therapy", "therapies") + " delivered, " + inp("det-therapy", "details from the EGM") + "</span>");
+  if (ahr) ep.push(ahr + " AHR " + (ahr === 1 ? "episode" : "episodes") + " noted, longest episode lasting " + (d.ahr_longest ? val(d.ahr_longest) : inp("ahr-longest", "duration", "w-mid")));
+  if (d.therapies_delivered && d.source !== "CareLink") ep.push('<span class="nw">' + pl(d.therapies_delivered, "therapy", "therapies") + " delivered, " + inp("det-therapy", "details from the EGM") + "</span>");
   out = out.concat(ep.length ? ep : ["No high rate episodes were noted."]);
+  if (d.source === "CareLink" && d.icd)
+    out.push(d.therapies_delivered ? '<span class="nw">Therapy delivered: ' + inp("det-therapy", "therapy details") + "</span>" : "No therapies delivered");
   // Burden N/R: DDIR says so on the line; VVI(R) has no atrial lead, so the line is left out.
-  var mode = d.device.mode || "";
+  var mode = (d.device.mode || "").replace(/^AAIR?<=>(DDDR?)$/, "$1");   // MVP mode counts as DDD(R)
   if (d.atrial_burden_percent != null) out.push("Atrial burden: " + val((d.atrial_burden_op || "") + d.atrial_burden_percent) + "%");
   else if (mode === "DDIR") out.push("Atrial burden: DDIR");
   else if (/^DDDR?$/.test(mode)) out.push("Atrial burden: " + val("0") + "%");
   else if (!/^VVIR?$/.test(mode)) out.push("Atrial burden: " + val(null, "burden", "%") + "%");
   var line = function (tag) { return flags.filter(function (f) { return f.tag === tag && f.level !== "info"; }).map(function (f) { return f.title; }).join("; "); };
   var imp = line("imp"), sen = line("sense");
-  out.push(imp ? '<span class="flagged">Lead impedance: ' + esc(imp) + "</span>" : "Lead impedance stable");
+  out.push(imp ? '<span class="flagged">Lead impedance: ' + esc(imp) + "</span>" : d.icd && d.source === "CareLink" ? "Lead and HV impedance stable" : "Lead impedance stable");
   out.push(sen ? '<span class="flagged">Sensing/capture: ' + esc(sen) + "</span>" : "Sensing and capture within range");
   out.push("Estimated battery longevity is " + (d.battery.text ? val(d.battery.text) : val(null, "batt", "#") + " years"));
-  out.push("Next appointment with " + val(d.site, "site", "clinic"));
+  out.push("Next appointment with " + (d.siteChoice ? '<select class="report-select" data-k="site">' +
+    SITES.map(function (c) { return '<option value="' + c + '"' + (c === d.site ? " selected" : "") + ">" + c + "</option>"; }).join("") + "</select>" : val(d.site, "site", "clinic")));
   var extra = d.device_notes || [];
   if (extra.length) out.push(esc(extra.join(" ")));
   out.push('<select class="report-select" data-k="action">' + ACTIONS.map(function (a) { return '<option value="' + a + '">' + a + "</option>"; }).join("") + "</select>");
@@ -345,7 +493,7 @@ var CSS = [
   ".pmr .report-select{font:inherit;font-size:15px;background:#fffdf3;border:1px solid #c9b98a;border-radius:4px;padding:1px 3px;max-width:100%;color:#17232b}",
   ".pmr .report-select.needs{border-color:#b4232c;box-shadow:0 0 0 2px #fbe9ea}",
   ".pmr .fill-input{font:15px ui-monospace,Menlo,Consolas,monospace;background:#fffdf3;border:1px solid #c9b98a;border-radius:4px;padding:1px 5px;color:#17232b}",
-  ".pmr .w-short{width:5.5em}.pmr .w-long{width:13em;max-width:100%}.pmr .nw{white-space:nowrap}",
+  ".pmr .w-short{width:5.5em}.pmr .w-long{width:13em;max-width:100%}.pmr .w-mid{width:8.5em}.pmr .nw{white-space:nowrap}",
   ".pmr .prefilled{box-shadow:inset 0 -2px 0 #0f5e7a}.pmr .flagged{color:#b4232c;font-weight:600}",
   ".pmr .btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
   ".pmr button.b{font:inherit;font-size:15px;padding:7px 14px;border-radius:6px;border:1px solid #d6dee2;background:#fff;cursor:pointer;color:#17232b}",
@@ -366,23 +514,24 @@ function render(host, d, T, opt) {
   var flags = d.recognised ? evaluate(d, T) : [];
   var crit = flags.filter(function (f) { return f.level === "critical"; }).length, warn = flags.filter(function (f) { return f.level === "warn"; }).length;
   var vcls = crit ? "v-crit" : warn ? "v-warn" : "v-ok";
-  var vtxt = !d.recognised ? "This doesn't look like a LATITUDE Summary page." : crit ? crit + " critical, " + warn + " to review" : warn ? warn + " to review" : "Nothing out of range";
+  var vtxt = !d.recognised ? "This doesn't look like a LATITUDE Summary or CareLink Current Status page." : crit ? crit + " critical, " + warn + " to review" : warn ? warn + " to review" : "Nothing out of range";
   if (!d.recognised) vcls = "v-warn";
   var cell = function (c, kind) {
     if (c === undefined) return "";
     if (c === null) return "N/R";
     return kind === "amp" ? c.op + c.v + " mV" : kind === "imp" ? c.op + c.v + " Ω" : (c.auto ? "Auto " : "") + c.v + " V @ " + c.pw + " ms";
   };
+  var one = d.source === "CareLink";           // CareLink: current values only, no in-office column
   var leadRows = (d.leads || []).map(function (l) {
-    var row = "<tr><th>" + l.chamber + "</th>";
+    var row = "<tr><th>" + (l.coil ? "HV " + l.coil : l.chamber) + "</th>";
     ["amp", "imp", "thr"].forEach(function (k) {
-      row += '<td><b class="cur">' + esc(cell(l.daily[k], k) || "—") + '</b></td><td class="old">' + esc(cell(l.office[k], k) || "—") + "</td>";
+      row += '<td><b class="cur">' + esc(cell(l.daily[k], k) || "—") + "</b></td>" + (one ? "" : '<td class="old">' + esc(cell(l.office[k], k) || "—") + "</td>");
     });
     return row + "</tr>";
   }).join("");
   host.innerHTML = '<style>' + CSS + '</style><div class="pmr"><div class="card">' +
     '<div class="top"><div><div class="dev">' + esc(d.device.model || "Unknown device") + (d.device.mode ? " · " + esc(d.device.mode) : "") + '</div>' +
-    '<div class="sub">' + esc([d.patient.name, d.device.serial ? "SN " + d.device.serial : "", d.measured ? "Daily " + d.measured : "", d.tags.length ? "Tags: " + d.tags.join(" ") : ""].filter(Boolean).join(" · ")) + '</div></div>' +
+    '<div class="sub">' + esc([d.patient.name, d.device.serial ? "SN " + d.device.serial : "", d.measured ? (d.source === "CareLink" ? "Interrogated " : "Daily ") + d.measured : "", d.tags.length ? "Tags: " + d.tags.join(" ") : ""].filter(Boolean).join(" · ")) + '</div></div>' +
     (opt.onClose ? '<button class="x" data-a="close" aria-label="Close">×</button>' : "") + '</div>' +
     '<div class="verdict ' + vcls + '">' + esc(vtxt) + '</div>' +
     (flags.length ? "<ul>" + flags.map(function (f) {
@@ -393,9 +542,10 @@ function render(host, d, T, opt) {
     '<div class="btns"><button class="b p" data-a="copy">Copy report</button>' +
     (d.patient.name ? '<button class="b" data-a="name">Copy name</button>' : "") +
     '<span class="msg" data-k="msg"></span></div>' +
-    (leadRows ? '<div class="tw"><table><tr><th></th><th colspan="2">Sensing</th><th colspan="2">Impedance</th><th colspan="2">Threshold</th></tr>' +
-      '<tr class="hd"><th></th>' + '<th class="cur">Daily</th><th class="old">In-office</th>'.repeat(3) + "</tr>" + leadRows + "</table></div>" +
-      '<div class="sub"><b class="cur">Daily ' + esc(d.measured || "") + '</b> (current) · <span class="old">In-office ' + esc(d.office_date || "") + "</span></div>" : "") +
+    (leadRows ? '<div class="tw"><table><tr><th></th><th colspan="' + (one ? 1 : 2) + '">Sensing</th><th colspan="' + (one ? 1 : 2) + '">Impedance</th><th colspan="' + (one ? 1 : 2) + '">Threshold</th></tr>' +
+      '<tr class="hd"><th></th>' + (one ? '<th class="cur">Current</th>' : '<th class="cur">Daily</th><th class="old">In-office</th>').repeat(3) + "</tr>" + leadRows + "</table></div>" +
+      (one ? '<div class="sub"><b class="cur">Interrogated ' + esc(d.interrogated || "") + "</b></div>"
+        : '<div class="sub"><b class="cur">Daily ' + esc(d.measured || "") + '</b> (current) · <span class="old">In-office ' + esc(d.office_date || "") + "</span></div>") : "") +
     '<div class="sub">Pacing A ' + (d.pacing_percent.atrial != null ? d.pacing_percent.atrial + "%" : "—") + " · V " + (d.pacing_percent.ventricular != null ? d.pacing_percent.ventricular + "%" : "—") +
     (d.since_reset ? " · counters since " + esc(d.since_reset) : "") + "</div>" +
     "</div></div>";
@@ -454,11 +604,13 @@ function reportText(rootEl) {
 
 /* ---------------- Bookmarklet entry ---------------- */
 function pageText(doc) {
-  var best = "", score = function (t) { return (/Pace Impedance/i.test(t) ? 2 : 0) + (/time to explant/i.test(t) ? 1 : 0); };
+  var best = { text: "", doc: doc }, score = function (t) {
+    return (/Pace Impedance|Capture Threshold/i.test(t) ? 2 : 0) + (/time to explant|Remaining Longevity|Arrhythmia Episodes/i.test(t) ? 1 : 0);
+  };
   (function visit(dc) {
     try {
       var t = dc.body ? dc.body.innerText : "";
-      if (score(t) > score(best) || (score(t) === score(best) && t.length > best.length && !best)) best = t;
+      if (score(t) > score(best.text) || (!best.text && t.length)) best = { text: t, doc: dc };
       var fr = dc.querySelectorAll("iframe,frame");
       for (var i = 0; i < fr.length; i++) { try { if (fr[i].contentDocument) visit(fr[i].contentDocument); } catch (e) {} }
     } catch (e) {}
@@ -466,18 +618,68 @@ function pageText(doc) {
   return best;
 }
 
+// Saved Episodes-tab result, kept only for the same device and interrogation date
+var EP_KEY = "pmr.carelink.episodes";
+function epKey(d) { return (d.device.serial || "") + "|" + (d.interrogated || ""); }
+function saveEpisodes(d) { try { localStorage.setItem(EP_KEY, JSON.stringify({ k: epKey(d), longest: d.ahr_longest, t: Date.now() })); } catch (e) {} }
+function savedEpisodes(d) {
+  try { var v = JSON.parse(localStorage.getItem(EP_KEY) || "null"); return v && v.k === epKey(d) && Date.now() - v.t < 12 * 3600e3 ? v.longest : null; } catch (e) { return null; }
+}
+
+// Load the Episodes tab in an invisible same-site frame and read its text (the frame must be laid out for innerText)
+function loadEpisodes(doc, cb) {
+  var a = [].filter.call(doc.querySelectorAll("a"), function (x) { return /^\s*Episodes\s*$/.test(x.textContent) && /^https?:/.test(x.href) && x.href.indexOf(location.origin) === 0; })[0];
+  if (!a) return cb(null);
+  var f = document.createElement("iframe"), done = false, t0 = Date.now();
+  f.style.cssText = "position:fixed;left:-20000px;top:0;width:1280px;height:900px;opacity:0;pointer-events:none";
+  var finish = function (v) { if (done) return; done = true; f.remove(); cb(v); };
+  var poll = function () {
+    if (done) return;
+    try {
+      var t = f.contentDocument && f.contentDocument.body ? f.contentDocument.body.innerText : "";
+      if (/Arrhythmia Episodes/i.test(t)) return finish(t);
+    } catch (e) { return finish(null); }
+    if (Date.now() - t0 > 15000) return finish(null);
+    setTimeout(poll, 400);
+  };
+  f.onload = poll;
+  f.src = a.href;
+  document.body.appendChild(f);
+  setTimeout(poll, 1500);
+}
+
 function openOverlay(T) {
   var old = document.getElementById("pmremote-overlay");
   if (old) old.remove();
-  var d = parseLatitude(pageText(document));
+  var pg = pageText(document), d = parse(pg.text);
   var box = document.createElement("div");
   box.id = "pmremote-overlay";
   box.style.cssText = "position:fixed;top:12px;left:12px;width:min(600px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:2147483647;box-shadow:0 8px 30px rgba(0,0,0,.25);border-radius:8px";
   document.body.appendChild(box);
   var host = box.attachShadow ? box.attachShadow({ mode: "open" }) : box;
-  render(host, d, T, { onClose: function () { box.remove(); } });
+  var close = function () { box.remove(); };
+  if (d.source === "CareLink" && d.episodes_page) {
+    // Clicked on the Episodes tab: remember the longest AT/AF for this transmission
+    if (d.ahr_longest) saveEpisodes(d);
+    host.innerHTML = "<style>" + CSS + '</style><div class="pmr"><div class="card"><div class="top"><div class="dev">Episodes</div><button class="x" data-a="close" aria-label="Close">×</button></div>' +
+      '<div class="verdict ' + (d.ahr_longest ? "v-ok" : "v-warn") + '">' + (d.ahr_longest ? "Longest AT/AF episode: " + esc(d.ahr_longest) + " (of " + d.ahr_longest_listed + " listed). Saved: open Current Status and click PM Remote."
+        : "No AT/AF episodes found on this page.") + "</div></div></div>";
+    host.querySelector('[data-a="close"]').onclick = close;
+    return;
+  }
+  if (d.source === "CareLink" && !d.ahr_longest) d.ahr_longest = savedEpisodes(d);
+  render(host, d, T, { onClose: close });
+  var slot = host.querySelector('[data-k="ahr-longest"]');
+  if (d.source === "CareLink" && slot) {
+    slot.placeholder = "reading Episodes…";
+    loadEpisodes(pg.doc, function (t) {
+      var e = t ? parseCarelinkEpisodes(lines(t)) : null;
+      if (e && slot.isConnected && !slot.value) { slot.value = fmtDur(e.longest_seconds); slot.classList.add("prefilled"); }
+      else if (slot.isConnected && !slot.value) slot.placeholder = "duration (open Episodes, click PM Remote)";
+    });
+  }
 }
 
-var api = { lastName: lastName, durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
+var api = { parse: parse, parseCarelink: parseCarelink, cellSeconds: cellSeconds, lastName: lastName, durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
 if (typeof module !== "undefined" && module.exports) module.exports = api; else root.PMRemote = api;
 })(typeof window !== "undefined" ? window : this);

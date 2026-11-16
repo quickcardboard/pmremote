@@ -32,7 +32,7 @@ details summary { cursor: pointer; font-weight: 600 }
 <body>
 <div class="wrap">
   <h1>PM Remote</h1>
-  <p class="lede">Reads a LATITUDE Summary page, flags values outside your thresholds and fills your remote-transmission template.
+  <p class="lede">Reads a LATITUDE Summary page or a CareLink Current Status page, flags values outside your thresholds and fills your remote-transmission template.
     Everything runs in your browser: nothing is sent anywhere and no AI is used.</p>
   <div class="grid">
     <div class="col">
@@ -41,13 +41,13 @@ details summary { cursor: pointer; font-weight: 600 }
         <ol>
           <li>Show your bookmarks bar (Ctrl+Shift+B).</li>
           <li>Drag this button onto it:<br><a class="bm" id="bm" href="#">PM Remote</a></li>
-          <li>On a patient's LATITUDE <b>Summary</b> page, click <b>PM Remote</b>. A panel opens with the flags and your filled report.</li>
+          <li>On a patient's LATITUDE <b>Summary</b> or CareLink <b>Current Status</b> page, click <b>PM Remote</b>. A panel opens with the flags and your filled report.</li>
         </ol>
         <p class="hint">After changing the thresholds below, drag the button again and delete the old one: the settings are built into it.</p>
       </section>
       <section class="panel">
         <h2>Or paste the page</h2>
-        <p class="hint" style="margin:0 0 8px">On the LATITUDE Summary page press Ctrl+A, then Ctrl+C, and paste here.</p>
+        <p class="hint" style="margin:0 0 8px">On the LATITUDE Summary or CareLink Current Status page press Ctrl+A, then Ctrl+C, and paste here. For CareLink you can paste the Episodes tab after it.</p>
         <textarea id="paste" placeholder="Paste the LATITUDE Summary page here"></textarea>
         <div class="row"><button class="btn p" id="read">Read</button><button class="btn" id="example">Load example</button></div>
       </section>
@@ -97,7 +97,7 @@ details summary { cursor: pointer; font-weight: 600 }
   function show() {
     $("extag").innerHTML = isExample ? '<span class="tag">Example, fictional patient</span>' : "";
     if (!current) { $("out").innerHTML = '<p class="hint">Paste a LATITUDE Summary page, or load the example.</p>'; return; }
-    P.render($("out"), P.parseLatitude(current), T);
+    P.render($("out"), P.parse(current), T);
   }
   $("read").onclick = function () { current = $("paste").value; isExample = false; show(); };
   $("example").onclick = function () { current = EXAMPLE; isExample = true; show(); };

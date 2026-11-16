@@ -93,6 +93,27 @@ eq(ind.pacing_percent, { ventricular: 91 }, "unlabelled percent paced is ventric
 eq(ind.episodes.map((e) => [e.type, e.count]), [["NSVT", 1]], "Nonsustained Episodes counted");
 eq(ind.site, "DH", "site");
 eq([P.fmtDur(80), P.fmtDur(75), P.fmtDur(60)], ["1.5 minutes", "1.5 minutes", "1 minute"], "half minutes");
+// ---- Medtronic CareLink
+const k = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "kilo.txt"), "utf8"));
+eq([k.source, k.icd, k.patient.name, k.device.serial, k.device.mode, k.site], ["CareLink", false, "TESTPATIENT, KILO D", "TST900071G", "AAI<=>DDD", "JPOCSC"], "CareLink PM header");
+eq(k.leads.map((l) => [l.chamber, l.impedance_ohm, l.threshold_v, l.amplitude_mv]), [["RA", 513, 0.5, 3.1], ["RV", 456, 0.375, 13.8]], "CareLink PM leads");
+eq(k.episodes.map((e) => [e.type, e.count]), [["VT", 2], ["AHR", 7]], "VT (>4 beats) -> VHR, AT/AF -> AHR");
+eq([k.atrial_burden_percent, k.battery.text, k.pacing_percent], [0.5, "13.7 years", { ventricular: 0.3, atrial: 22.7 }], "burden from brackets, battery, pacing");
+eq(P.evaluate(k, P.DEFAULTS).map((f) => f.title), [], "CareLink PM: no alerts");
+const lm = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "lima.txt"), "utf8"));
+eq([lm.icd, lm.battery.text, lm.atrial_burden_op, lm.atrial_burden_percent, lm.therapies_delivered, lm.treated, lm.oversensing], [true, "20 months", "<", 0.1, 0, 0, 0], "CareLink ICD");
+eq(lm.leads.map((l) => [l.coil || l.chamber, l.impedance_ohm]), [["RA", 380], ["RV", 342], ["RV", 70]], "pacing + HV impedance");
+eq(lm.episodes.map((e) => [e.type, e.count]), [["VT", 2]], "VT-NS -> VHR");
+eq(P.evaluate(lm, P.DEFAULTS).map((f) => f.title), [], "CareLink ICD: no alerts");
+const lm2 = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "lima.txt"), "utf8").replace("Total Shocks\n0\n0", "Total Shocks\n2\n0").replace("RV=70 ohms", "RV=160 ohms").replace("V. Oversensing-TWave Rx Withheld\n0", "V. Oversensing-TWave Rx Withheld\n3"));
+eq(P.evaluate(lm2, P.DEFAULTS).map((f) => f.level + ": " + f.title), ["critical: HV (RV) impedance 160 Ω", "critical: Therapy delivered (2)", "warn: 3 oversensing episodes (Rx withheld)"], "ICD therapy, HV and oversensing alerts");
+const mk = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "mike.txt"), "utf8"));
+eq([mk.episodes_page, mk.ahr_longest, mk.ahr_longest_listed], [true, "24.5 hours", 7], "Episodes tab: longest AT/AF 24:17:18");
+const both = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "kilo.txt"), "utf8") + "\n" + fs.readFileSync(path.join(__dirname, "fixtures", "mike.txt"), "utf8"));
+eq([both.episodes_page, both.ahr_longest, both.leads.length], [false, "24.5 hours", 2], "Current Status + Episodes pasted together");
+eq([P.cellSeconds(":01"), P.cellSeconds(":01:21"), P.cellSeconds("24:17:18"), P.cellSeconds("10-Oct-2026")], [1, 81, 87438, null], "Episodes duration cells");
+eq(P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "alpha.txt"), "utf8")).source, "LATITUDE", "LATITUDE still detected");
+
 // Alerts come from the daily value; N/R daily = no alert; low sensing within 20% of in-office = no alert
 const lead = (daily, office) => ({ chamber: "RV", daily: { amp: daily }, office: { amp: office } });
 const sense = (dl, of) => {
