@@ -120,6 +120,15 @@ const os = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "oscar.txt")
 eq([os.ahr_longest, os.ahr_longest_listed, os.svt_longest, os.svt_longest_listed], ["54 seconds", 6, "1.5 minutes at 162 BPM", 8], "longest AT/AF; longest of SVT, SVT-AF and Fast A&V with V rate");
 eq(P.cellSeconds("<:01"), 0.5, "'<:01' is under a second");
 
+const pa = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "papa.txt"), "utf8"));
+eq([pa.source, pa.events_page, pa.vhr_longest, pa.vhr_longest_listed, pa.device.serial, pa.interrogated], ["LATITUDE", true, "2 seconds at 172 BPM", 2, "900101", "19 Oct 2026 01:41"],
+  "LATITUDE Events: longest V-# minus 10 s, with onset rate");
+eq(P.parseLatitudeEvents(P.lines("V-132 15 Oct 2026 21:03 NonSustV Avg V Rate at Onset: 172 min-1 00:00:12\nATR-7357 17 Oct 2026 06:50 ATR Avg V Rate in ATR: 104 min-1 00:41:46")),
+  { vhr: { seconds: 2, vrate: 172, listed: 1 } }, "Events row flattened onto one line");
+eq(os.vhr_longest, "2 seconds at 167 BPM", "CareLink Episodes: longest VT-NS with V rate");
+eq([P.pageIdent(fs.readFileSync(path.join(__dirname, "fixtures", "kilo.txt"), "utf8")), P.pageIdent(fs.readFileSync(path.join(__dirname, "fixtures", "papa.txt"), "utf8")), P.pageIdent("Patient list")],
+  ["CL|TST900071G|16-Nov-2026 09:55:08", "LAT|900101|19 Oct 2026 01:41", ""], "page identity for auto-close");
+
 // Alerts come from the daily value; N/R daily = no alert; low sensing within 20% of in-office = no alert
 const lead = (daily, office) => ({ chamber: "RV", daily: { amp: daily }, office: { amp: office } });
 const sense = (dl, of) => {

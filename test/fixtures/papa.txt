@@ -1,0 +1,27 @@
+LATITUDE™ NXT
+Logout|Help/Contact Us|Language: English|(My Profile)
+Manage Clinic
+Search Patients
+View Patient List
+Patient ID:TS900101
+Latest Device Transmission:19 Oct 2026 01:41 PDT
+Patient:TESTPATIENT, PAPADevice:L311 ACCOLADE MRI/900101Date of Birth:7 Jul 1947Age, Gender:79,Patient Group:JPOCSC Cardiac Device Clinic (Primary)Search Tags:DH ADVISORY PATIENTMonitoring Status:Monitored
+SummaryLeadsEventsPatient DiagnosticsHealthFollow-up History
+Arrhythmia Logbook
+Viewing Events Since: 
+Last Reset
+All Events (7) | Atrial Tachy (2) | Ventricular Tachy (2) | Other (3)
+Episodes 1 - 7 of 7
+Event
+Date/Time
+Type
+Summary
+Duration hh:mm:ss
+	 RAAT-2490	18 Oct 2026 22:27	RA Auto		--------
+	 RYTHMIQ™-76	18 Oct 2026 10:40	RYTHMIQ™		00:00:55
+	 ATR-7360	17 Oct 2026 07:36	ATR	Avg V Rate in ATR: 99 min⁻¹	00:00:12
+	 ATR-7357	17 Oct 2026 06:50	ATR	Avg V Rate in ATR: 104 min⁻¹	00:41:46
+	 V-132	15 Oct 2026 21:03	NonSustV	Avg V Rate at Onset: 172 min⁻¹	00:00:12
+	 V-131	12 Oct 2026 04:10	NonSustV	Avg V Rate at Onset: 150 min⁻¹	00:00:11
+	 RYTHMIQ™-70	25 Sep 2026 20:49	RYTHMIQ™		03:09:15
+Episodes 1 - 7 of 7

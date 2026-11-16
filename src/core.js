@@ -40,6 +40,11 @@ function parseLatitude(text) {
     d.device.model = (sm ? sm[1] : dev).trim();
     d.device.serial = sm ? sm[2] : null;
   }
+  if (!d.device.serial) {
+    var dm = J.match(/Device:\s*([^\n]*?)\s*\/\s*(\d{4,})/i);
+    if (dm) { d.device.model = d.device.model || dm[1].trim(); d.device.serial = dm[2]; }
+  }
+  d.interrogated = grab(new RegExp("Latest Device Transmission:\\s*(" + DATE + "(?: \\d{1,2}:\\d{2})?)", "i"));
   var ti = L.findIndex(function (s) { return /^Search Tags:/i.test(s); });
   if (ti >= 0) {
     var tags = L[ti].replace(/^Search Tags:\s*/i, "").replace(/Monitoring Status.*$/i, "").trim();
@@ -186,7 +191,42 @@ function parseLatitude(text) {
   d.reason = /1003/.test(at) ? "error_1003" : /threshold.*suspend/i.test(at) ? "threshold_suspended" : /intrinsic amplitude/i.test(at) ? "amplitude_oor"
     : /(V-?Tachy|VT\b|ventricular tachy)/i.test(at) ? "vt" : /(AT\/AF|atrial (burden|arrhythmia))/i.test(at) ? "atrial_burden" : "scheduled";
   d.recognised = d.leads.length > 0 || d.battery.years != null;
+  // Events tab (Arrhythmia Logbook): longest V-# event, when that text is here
+  var ev = parseLatitudeEvents(L);
+  if (ev) { d.vhr_longest = episodeText(ev.vhr, true); d.vhr_longest_listed = ev.vhr.listed; }
+  d.events_page = /Arrhythmia Logbook/i.test(J) && !d.recognised;
   return d;
+}
+
+// LATITUDE Events tab rows: "V-132", "15 Oct 2026 21:03", "NonSustV", "Avg V Rate at Onset: 172 min-1", "00:00:12".
+// Longest V-# event with its onset rate; LATITUDE durations include 10 s of onset, so 10 s is taken off.
+function parseLatitudeEvents(L) {
+  var best = null, n = 0;
+  for (var i = 0; i < L.length; i++) {
+    // whole row on one line ("V-132 15 Oct 2026 21:03 NonSustV Avg V Rate at Onset: 172 min-1 00:00:12")
+    var one = L[i].match(/^V-\d+\s.*?(\d{1,2}):(\d{2}):(\d{2})\s*$/);
+    if (one) {
+      var s1 = Math.max(0, +one[1] * 3600 + +one[2] * 60 + +one[3] - 10), r1 = L[i].match(/Avg V Rate[^:]*:\s*(\d+)/i);
+      n++;
+      if (!best || s1 > best.seconds) best = { seconds: s1, vrate: r1 ? +r1[1] : null };
+      continue;
+    }
+    if (!/^V-\d+$/.test(L[i])) continue;
+    var rate = null;
+    for (var j = i + 1; j <= i + 5 && j < L.length; j++) {
+      if (/^[A-Z][A-Za-z\u2122]*-\d+$/.test(L[j])) break;           // next event
+      var r = L[j].match(/Avg V Rate[^:]*:\s*(\d+)/i);
+      if (r) rate = +r[1];
+      var m = L[j].match(/^(\d{1,2}):(\d{2}):(\d{2})$/);
+      if (m) {
+        var sec = Math.max(0, +m[1] * 3600 + +m[2] * 60 + +m[3] - 10);
+        n++;
+        if (!best || sec > best.seconds) best = { seconds: sec, vrate: rate };
+        break;
+      }
+    }
+  }
+  return n ? { vhr: { seconds: best.seconds, vrate: best.vrate, listed: n } } : null;
 }
 
 // Duration text -> seconds. unit: a hint from the label, e.g. "min".
@@ -256,7 +296,7 @@ function cellSeconds(s) {
 
 // Episodes tab rows read Type, ID#, date, time, duration, "A/V" average rates. Longest episode per group:
 // AT/AF, and SVT (SVT, SVT-AF and Fast A&V together) with its ventricular rate.
-var EP_GROUPS = { ahr: /^(AT\/AF|AT|AF)$/i, svt: /^(SVT|SVT-AF|Fast A\s*&\s*V)$/i };
+var EP_GROUPS = { ahr: /^(AT\/AF|AT|AF)$/i, svt: /^(SVT|SVT-AF|Fast A\s*&\s*V)$/i, vhr: /^(VT|VT-NS|VF|FVT|VT-Mon|VT Monitor|High Rate-NS)$/i };
 function parseCarelinkEpisodes(L) {
   var out = {};
   for (var i = 1; i + 3 < L.length; i++) {
@@ -389,6 +429,7 @@ function parseCarelink(text) {
   if (epi) {
     if (epi.ahr) { d.ahr_longest = episodeText(epi.ahr, false); d.ahr_longest_listed = epi.ahr.listed; }
     if (epi.svt) { d.svt_longest = episodeText(epi.svt, true); d.svt_longest_listed = epi.svt.listed; }
+    if (epi.vhr) { d.vhr_longest = episodeText(epi.vhr, true); d.vhr_longest_listed = epi.vhr.listed; }
   }
   d.episodes_page = /Arrhythmia Episodes with EGM/i.test(J) && !/Remaining Longevity/i.test(J);
   d.recognised = d.leads.length > 0 || d.battery.years != null;
@@ -466,7 +507,8 @@ function template(d, flags, T) {
   var ep = [];
   var row = function (n, what, k) { return '<span class="nw">' + n + " " + what + (n === 1 ? " episode" : " episodes") + " noted, " + inp("det-" + k, "details from the EGM") + "</span>"; };
   var vhr = by(["VT", "VF", "NSVT"]);              // VT, VF and nonsustained V together
-  if (vhr) ep.push(row(vhr, "VHR", "vhr"));
+  if (vhr) ep.push("<span>" + vhr + " VHR " + (vhr === 1 ? "episode" : "episodes") + " noted, longest episode is " +
+    (d.vhr_longest ? val(d.vhr_longest) : inp("vhr-longest", "duration", "w-mid")) + ", " + inp("det-vhr", "details from the EGM") + "</span>");
   var svt = by(["SVT"]);
   if (svt && d.source === "CareLink") ep.push("<span>" + svt + " SVT " + (svt === 1 ? "episode" : "episodes") + " noted, longest episode is " +
     (d.svt_longest ? val(d.svt_longest) : inp("svt-longest", "duration", "w-mid")) + ", " + inp("det-svt", "details from the EGM") + "</span>");
@@ -639,17 +681,17 @@ function pageText(doc) {
   return best;
 }
 
-// Saved Episodes-tab result, kept only for the same device and interrogation date
-var EP_KEY = "pmr.carelink.episodes";
-function epKey(d) { return (d.device.serial || "") + "|" + (d.interrogated || ""); }
-function saveEpisodes(d) { try { localStorage.setItem(EP_KEY, JSON.stringify({ k: epKey(d), ahr: d.ahr_longest, svt: d.svt_longest, t: Date.now() })); } catch (e) {} }
+// Saved Episodes/Events-tab results, kept only for the same device and transmission
+var EP_KEY = "pmr.tab.episodes";
+function epKey(d) { return d.source + "|" + (d.device.serial || "") + "|" + (d.interrogated || ""); }
+function saveEpisodes(d) { try { localStorage.setItem(EP_KEY, JSON.stringify({ k: epKey(d), ahr: d.ahr_longest, svt: d.svt_longest, vhr: d.vhr_longest, t: Date.now() })); } catch (e) {} }
 function savedEpisodes(d) {
   try { var v = JSON.parse(localStorage.getItem(EP_KEY) || "null"); return v && v.k === epKey(d) && Date.now() - v.t < 12 * 3600e3 ? v : null; } catch (e) { return null; }
 }
 
-// Load the Episodes tab in an invisible same-site frame and read its text (the frame must be laid out for innerText)
-function loadEpisodes(doc, cb) {
-  var a = [].filter.call(doc.querySelectorAll("a"), function (x) { return /^\s*Episodes\s*$/.test(x.textContent) && /^https?:/.test(x.href) && x.href.indexOf(location.origin) === 0; })[0];
+// Load another tab (a same-site link) in an invisible frame and read its text; the frame must be laid out for innerText
+function loadTab(doc, linkText, ready, cb) {
+  var a = [].filter.call(doc.querySelectorAll("a"), function (x) { return linkText.test(x.textContent) && /^https?:/.test(x.href) && x.href.indexOf(location.origin) === 0; })[0];
   if (!a) return cb(null);
   var f = document.createElement("iframe"), done = false, t0 = Date.now();
   f.style.cssText = "position:fixed;left:-20000px;top:0;width:1280px;height:900px;opacity:0;pointer-events:none";
@@ -658,7 +700,7 @@ function loadEpisodes(doc, cb) {
     if (done) return;
     try {
       var t = f.contentDocument && f.contentDocument.body ? f.contentDocument.body.innerText : "";
-      if (/Arrhythmia Episodes/i.test(t)) return finish(t);
+      if (ready.test(t)) return finish(t);
     } catch (e) { return finish(null); }
     if (Date.now() - t0 > 15000) return finish(null);
     setTimeout(poll, 400);
@@ -669,10 +711,37 @@ function loadEpisodes(doc, cb) {
   setTimeout(poll, 1500);
 }
 
+// Which patient transmission is on screen: device serial + transmission date ("" when none)
+function allText(doc) {
+  var out = "";
+  (function visit(dc) {
+    try {
+      out += (dc.body ? dc.body.innerText : "") + "\n";
+      var fr = dc.querySelectorAll("iframe,frame");
+      for (var i = 0; i < fr.length; i++) { try { if (fr[i].contentDocument) visit(fr[i].contentDocument); } catch (e) {} }
+    } catch (e) {}
+  })(doc);
+  return out;
+}
+function pageIdent(text) {
+  var m = text.match(/Serial Number:\s*(\S+)/i), t = text.match(/Date of Interrogation:\s*(\S+ \S+)/i);
+  if (m) return "CL|" + m[1] + "|" + (t ? t[1] : "");
+  m = text.match(/Device:[^\n]*?\/\s*(\d{4,})/i); t = text.match(/Latest Device Transmission:\s*(\d{1,2} \w{3} \d{4}(?: \d{1,2}:\d{2})?)/i);
+  return m ? "LAT|" + m[1] + "|" + (t ? t[1] : "") : "";
+}
+
+var TAB = {
+  CareLink: { link: /^\s*Episodes\s*$/, ready: /Arrhythmia Episodes/i, back: "Quick Look II", name: "Episodes",
+    read: function (t) { return parseCarelinkEpisodes(lines(t)); } },
+  LATITUDE: { link: /^\s*Events\s*$/, ready: /Arrhythmia Logbook/i, back: "Summary", name: "Events",
+    read: function (t) { return parseLatitudeEvents(lines(t)); } }
+};
+var GROUP_NAME = { ahr: "AT/AF", svt: "SVT / Fast A&amp;V", vhr: "VHR" };
+
 function openOverlay(T) {
   var old = document.getElementById("pmremote-overlay");
   if (old) old.remove();
-  var pg = pageText(document), d = parse(pg.text);
+  var pg = pageText(document), d = parse(pg.text), tab = TAB[d.source];
   var box = document.createElement("div");
   box.id = "pmremote-overlay";
   var side = d.source === "CareLink" ? "right" : "left";
@@ -686,40 +755,53 @@ function openOverlay(T) {
   probe.remove();
   if (zoom && Math.abs(zoom - 1) > 0.02) box.style.zoom = String(1 / zoom);
   var host = box.attachShadow ? box.attachShadow({ mode: "open" }) : box;
-  var close = function () { box.remove(); };
-  if (d.source === "CareLink" && d.episodes_page) {
-    // Clicked on the Episodes tab: remember the longest AT/AF for this transmission
-    if (d.ahr_longest || d.svt_longest) saveEpisodes(d);
+  var watch = null;
+  var close = function () { if (watch) clearInterval(watch); box.remove(); };
+
+  // Close when another patient or transmission is opened, or when no patient is on screen for ~5 s
+  var ident = pageIdent(allText(document)), missing = 0;
+  if (ident) watch = setInterval(function () {
+    if (!box.isConnected) return clearInterval(watch);
+    var now = pageIdent(allText(document));
+    if (now && now !== ident) return close();
+    missing = now ? 0 : missing + 1;
+    if (missing >= 3) close();
+  }, 1700);
+
+  if (d.episodes_page || d.events_page) {
+    // Clicked on the Episodes/Events tab: remember the longest episodes for this transmission
     var msgs = [];
-    if (d.ahr_longest) msgs.push("Longest AT/AF episode: " + esc(d.ahr_longest) + " (of " + d.ahr_longest_listed + " listed).");
-    if (d.svt_longest) msgs.push("Longest SVT / Fast A&amp;V episode: " + esc(d.svt_longest) + " (of " + d.svt_longest_listed + " listed).");
-    host.innerHTML = "<style>" + CSS + '</style><div class="pmr"><div class="card"><div class="top"><div class="dev">Episodes</div><button class="x" data-a="close" aria-label="Close">×</button></div>' +
-      '<div class="verdict ' + (msgs.length ? "v-ok" : "v-warn") + '">' + (msgs.length ? msgs.join("<br>") + "<br>Saved: return to Quick Look II and press PM Remote again."
-        : "No AT/AF or SVT episodes found on this page.") + "</div></div></div>";
+    ["vhr", "svt", "ahr"].forEach(function (g) {
+      if (d[g + "_longest"]) msgs.push("Longest " + GROUP_NAME[g] + " episode: " + esc(d[g + "_longest"]) + " (of " + d[g + "_longest_listed"] + " listed).");
+    });
+    if (msgs.length) saveEpisodes(d);
+    host.innerHTML = "<style>" + CSS + '</style><div class="pmr"><div class="card"><div class="top"><div class="dev">' + tab.name + '</div><button class="x" data-a="close" aria-label="Close">×</button></div>' +
+      '<div class="verdict ' + (msgs.length ? "v-ok" : "v-warn") + '">' + (msgs.length ? msgs.join("<br>") + "<br>Saved: return to " + tab.back + " and press PM Remote again."
+        : "No episodes found on this page.") + "</div></div></div>";
     host.querySelector('[data-a="close"]').onclick = close;
     return;
   }
-  if (d.source === "CareLink") {
-    var sv = savedEpisodes(d);
-    if (sv) { d.ahr_longest = d.ahr_longest || sv.ahr; d.svt_longest = d.svt_longest || sv.svt; }
-  }
+  var sv = tab ? savedEpisodes(d) : null;
+  if (sv) ["ahr", "svt", "vhr"].forEach(function (g) { d[g + "_longest"] = d[g + "_longest"] || sv[g]; });
   render(host, d, T, { onClose: close });
-  var slots = { ahr: host.querySelector('[data-k="ahr-longest"]'), svt: host.querySelector('[data-k="svt-longest"]') };
-  if (d.source === "CareLink" && (slots.ahr || slots.svt)) {
-    for (var g in slots) if (slots[g]) slots[g].placeholder = "reading Episodes…";
-    loadEpisodes(pg.doc, function (t) {
-      var e = t ? parseCarelinkEpisodes(lines(t)) : null;
-      for (var g in slots) {
-        var sl = slots[g];
-        if (!sl || !sl.isConnected || sl.value) continue;
-        var v = e && e[g] ? episodeText(e[g], g === "svt") : null;
-        if (v) { sl.value = v; sl.classList.add("prefilled"); sl.style.width = Math.max(8.5, v.length * 0.66 + 1) + "em"; }
-        else sl.placeholder = "open Episodes, press PM Remote";
-      }
-    });
-  }
+  if (!tab) return;
+  // Fill the longest-episode boxes from the other tab, read in the background
+  var groups = d.source === "CareLink" ? ["ahr", "svt", "vhr"] : ["vhr"];
+  var slots = {};
+  groups.forEach(function (g) { var el = host.querySelector('[data-k="' + g + '-longest"]'); if (el) { slots[g] = el; el.placeholder = "reading " + tab.name + "…"; } });
+  if (!Object.keys(slots).length) return;
+  loadTab(pg.doc, tab.link, tab.ready, function (t) {
+    var e = t ? tab.read(t) : null;
+    for (var g in slots) {
+      var sl = slots[g];
+      if (!sl.isConnected || sl.value) continue;
+      var v = e && e[g] ? episodeText(e[g], g !== "ahr") : null;
+      if (v) { sl.value = v; sl.classList.add("prefilled"); sl.style.width = Math.max(8.5, v.length * 0.66 + 1) + "em"; }
+      else sl.placeholder = "open " + tab.name + ", press PM Remote";
+    }
+  });
 }
 
-var api = { parse: parse, parseCarelink: parseCarelink, cellSeconds: cellSeconds, lastName: lastName, durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
+var api = { parseLatitudeEvents: parseLatitudeEvents, pageIdent: pageIdent, parse: parse, parseCarelink: parseCarelink, cellSeconds: cellSeconds, lastName: lastName, durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
 if (typeof module !== "undefined" && module.exports) module.exports = api; else root.PMRemote = api;
 })(typeof window !== "undefined" ? window : this);
