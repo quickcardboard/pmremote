@@ -1,0 +1,264 @@
+CareLink Network
+Clinic:
+CDN - JPOC
+Search patients
+Active Transmissions
+Reports List
+Export Status
+Summary Reports
+Advanced Search
+Transmission Schedule
+TESTPATIENT, QUEBEC
+01-Jan-1951
+(70 yrs)
+Reveal LINQ™
+(01-Feb-2024)
+MyCareLink™ 24952
+ Last Data Send:
+16-Nov-2026
+Current Report
+Quick Look
+Episodes
+Trends
+Comments and Notes
+History
+Reveal LINQ™ LNQ11
+Reason for Monitoring: Syncope
+Battery Status
+Device Serial Number: TST900111G
+Date of Implant: 01-Feb-2024
+
+OK
+Quick Look Data From:
+17-Jul-2026 15:54 to 16-Nov-2026 10:41
+Current
+Lifetime
+Parameters
+Symptom
+1
+13
+Four 7.5 min Episodes
+Tachy
+2
+12
+>158 bpm,>=16 beats
+Pause
+8
+9
+>3 seconds
+Brady
+0
+0
+<30 bpm,>=4 beats
+AT
+0
+0
+Off
+AF
+1
+7
+Only Longest Episode
+% of Time in AT/AF
+0.1%
+---
+Observations
+· No observations
+
+Episode List
+ID#
+Assessment
+Type
+Date
+Detected hh:mm
+Duration hh:mm:ss
+Max V. Rate
+Median V. Rate
+Episode Details
+41
+Pause
+26-Oct-2026
+10:13
+00:00:03
+105 bpm
+ECG
+37
+AF
+23-Sep-2026
+20:59
+02:02:00
+140 bpm
+91 bpm
+ECG
+35
+Symptom
+13-Sep-2026
+11:01
+ECG
+33
+Pause
+27-Aug-2026
+01:06
+00:00:06
+113 bpm
+ECG
+32
+ Inappropriate
+Pause
+20-Aug-2026
+10:15
+00:00:04
+92 bpm
+ECG
+31
+Tachy
+16-Aug-2026
+14:51
+00:00:08
+176 bpm
+176 bpm
+ECG
+30
+Tachy
+16-Aug-2026
+14:37
+00:00:07
+188 bpm
+188 bpm
+ECG
+
+ECG
+Current ECG: 16-Nov-2026 10:41:37
+Report chart.
+Symptom Episode(s)
+ID#
+Assessment
+Type
+Date
+Detected hh:mm
+Duration hh:mm:ss
+Max V. Rate
+Median V. Rate
+35
+Not Assessed
+Symptom
+13-Sep-2026
+11:01
+Report chart.
+Tachy Episode(s)
+ID#
+Assessment
+Type
+Date
+Detected hh:mm
+Duration hh:mm:ss
+Max V. Rate
+Median V. Rate
+31
+Not Assessed
+Tachy
+16-Aug-2026
+14:51
+00:00:08
+176 bpm
+176 bpm
+Report chart.
+30
+Not Assessed
+Tachy
+16-Aug-2026
+14:37
+00:00:07
+188 bpm
+188 bpm
+Report chart.
+Pause Episode(s)
+ID#
+Assessment
+Type
+Date
+Detected hh:mm
+Duration hh:mm:ss
+Max V. Rate
+Median V. Rate
+41
+Not Assessed
+Pause
+26-Oct-2026
+10:13
+00:00:03
+105 bpm
+Report chart.
+40
+Not Assessed
+Pause
+21-Oct-2026
+08:09
+00:00:04
+95 bpm
+Report chart.
+39
+Not Assessed
+Pause
+03-Oct-2026
+09:45
+00:00:05
+105 bpm
+Report chart.
+38
+Not Assessed
+Pause
+03-Oct-2026
+08:48
+00:00:05
+109 bpm
+Report chart.
+36
+Not Assessed
+Pause
+23-Sep-2026
+09:59
+00:00:04
+128 bpm
+Report chart.
+34
+Not Assessed
+Pause
+12-Sep-2026
+12:58
+00:00:05
+111 bpm
+Report chart.
+33
+Not Assessed
+Pause
+27-Aug-2026
+01:06
+00:00:06
+113 bpm
+Report chart.
+32
+Inappropriate
+Pause
+20-Aug-2026
+10:15
+00:00:04
+92 bpm
+Report chart.
+AF Episode(s)
+ID#
+Assessment
+Type
+Date
+Detected hh:mm
+Duration hh:mm:ss
+Max V. Rate
+Median V. Rate
+37
+Not Assessed
+AF
+23-Sep-2026
+20:59
+02:02:00
+140 bpm
+91 bpm
+Report chart.

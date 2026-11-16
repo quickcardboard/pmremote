@@ -436,8 +436,76 @@ function parseCarelink(text) {
   return d;
 }
 
+// Medtronic loop recorder (Reveal LINQ) Quick Look: counters (Current / Lifetime) and the episode rows on the same page
+var LOOP_TYPES = /^(Symptom|Tachy|Pause|Brady|AT|AF)$/;
+function parseLinq(text) {
+  var L = lines(text), J = L.join("\n");
+  var grab = function (re) { var m = J.match(re); return m ? m[1].trim() : null; };
+  var d = { source: "CareLink", loop: true, device: {}, patient: {}, leads: [], episodes: [], device_alerts: [], device_notes: [], pacing_percent: {}, battery: {}, tags: [], loopEp: {} };
+  d.patient.name = (L.filter(function (s) { return /^[A-Z][A-Z'\- ]*\d*, [A-Z][A-Z'\-. ]*\d*$/.test(s); })[0]) || null;
+  d.device.model = (L.filter(function (s) { return /^(Reveal|LINQ)\b.*\b[A-Z]{3}\d+\s*$/i.test(s); })[0] || "Reveal LINQ").replace(/™/g, "").replace(/\s+/g, " ");
+  d.device.serial = grab(/Serial Number:\s*(\S+)/i);
+  var qr = J.match(new RegExp("Quick Look Data From:\\s*(" + MDATE + "(?: \\d{1,2}:\\d{2})?)\\s*to\\s*(" + MDATE + "(?: \\d{1,2}:\\d{2})?)", "i"));
+  if (qr) { d.since_reset = qr[1]; d.interrogated = qr[2]; d.measured = qr[2]; }
+  // Battery Status ... OK / RRT / EOS
+  var bi = L.findIndex(function (s) { return /^Battery Status$/i.test(s); });
+  for (var b = bi + 1; bi >= 0 && b < bi + 6 && b < L.length; b++) {
+    if (/^(OK|Good)$/i.test(L[b])) { d.battery.state = "OK"; break; }
+    if (/\b(RRT|ERI|EOS|End of Service|Replace)\b/i.test(L[b])) { d.battery.state = "EOS"; d.battery.status = "EOS"; break; }
+  }
+  // Counters: label, Current, Lifetime
+  var cur = {};
+  L.forEach(function (s, i) { if (LOOP_TYPES.test(s) && /^\d+$/.test(L[i + 1] || "") && /^\d+$/.test(L[i + 2] || "") && !(s in cur)) cur[s] = +L[i + 1]; });
+  d.counts = cur;
+  var bp = J.match(/% of Time in AT\/AF\s+([<>]?)\s*(\d+(?:\.\d+)?)\s*%/i);
+  if (bp) { d.atrial_burden_percent = +bp[2]; d.atrial_burden_op = bp[1]; }
+  // Episode rows: ID#, [assessment], Type, date, hh:mm, duration hh:mm:ss, max V rate, [median]. Each ID counted once.
+  var seen = {};
+  for (var i = 1; i + 3 < L.length; i++) {
+    if (!LOOP_TYPES.test(L[i]) || !new RegExp("^" + MDATE + "$").test(L[i + 1])) continue;
+    var id = /^\d+$/.test(L[i - 1]) ? L[i - 1] : /^\d+$/.test(L[i - 2] || "") ? L[i - 2] : null;
+    if (!id || seen[id]) continue;
+    seen[id] = 1;
+    var dur = (L[i + 3] || "").match(/^(\d+):(\d{2}):(\d{2})$/), rate = (L[i + 4] || "").match(/^(\d+)\s*bpm$/i);
+    var g = d.loopEp[L[i]] || (d.loopEp[L[i]] = { listed: 0, seconds: -1 });
+    g.listed++;
+    if (dur) {
+      var sec = +dur[1] * 3600 + +dur[2] * 60 + +dur[3];
+      if (sec > g.seconds) { g.seconds = sec; g.vrate = rate ? +rate[1] : null; }
+    }
+  }
+  d.recognised = !!d.battery.state || Object.keys(cur).length > 0;
+  return d;
+}
+
+var LOOP_REASONS = ["manual transmission.", "patient symptoms.", "scheduled transmission.", "ventricular high rate episodes.", "bradycardia.", "atrial fibrillation.", "pause."];
+var LOOP_ACTIONS = ["No actions taken", "Meditech ordered, report routed", "Cardiologist notified"];
+function loopTemplate(d) {
+  // options are "text" or [copied text, short label]
+  var sel = function (k, opts, cur) { return '<select class="report-select" data-k="' + k + '">' + opts.map(function (o) {
+    var v = o.join ? o[0] : o, lab = o.join ? o[1] : o;
+    return '<option value="' + esc(v) + '"' + (v === cur ? " selected" : "") + ">" + esc(lab) + "</option>"; }).join("") + "</select>"; };
+  var c = d.counts || {}, E = d.loopEp || {};
+  var up = function (t, rate) { var g = E[t]; if (!g || g.seconds < 0) return ""; return " up to " + fmtDur(g.seconds) + (rate && g.vrate ? " at " + g.vrate + " BPM" : ""); };
+  var out = ["Remote transmission received due to " + sel("reason", LOOP_REASONS, "manual transmission.")], ev = [];
+  if (c.Symptom) ev.push(c.Symptom + " symptom related " + (c.Symptom === 1 ? "event" : "events") + ' recorded. <input type="text" class="fill-input w-long" data-k="symptoms" value="No symptoms reported">');
+  if (c.Tachy) ev.push(c.Tachy + " tachy " + (c.Tachy === 1 ? "episode" : "episodes") + " noted" + up("Tachy", true));
+  if (c.Pause) ev.push(c.Pause + " " + (c.Pause === 1 ? "Pause" : "Pauses") + " noted" + up("Pause", false));
+  if (c.Brady) ev.push(c.Brady + " brady " + (c.Brady === 1 ? "episode" : "episodes") + " noted" + up("Brady", true));
+  if (c.AT) ev.push(c.AT + " AT " + (c.AT === 1 ? "episode" : "episodes") + up("AT", false));
+  if (c.AF) ev.push(c.AF + " AF " + (c.AF === 1 ? "episode" : "episodes") + up("AF", false));
+  out = out.concat(ev.length ? ev : ["No new events recorded"]);
+  if (d.atrial_burden_percent != null) out.push("Atrial burden: " + esc((d.atrial_burden_op || "") + d.atrial_burden_percent) + "%");
+  out.push("R wave sensing: " + sel("rwave", ["good", "oversensing noted", "undersensing noted"], "good"));
+  out.push("Battery status: " + sel("batt", ["OK", ["End of service, explant recommended. Report sent to cardiologist", "EOS"]], d.battery.state === "EOS" ? "End of service, explant recommended. Report sent to cardiologist" : "OK"));
+  out.push('Meditech last ordered: <input type="date" class="fill-input" data-k="meditech">');
+  out.push(sel("action", LOOP_ACTIONS, "No actions taken"));
+  return out.join("<br>");
+}
+
+function isLinq(text) { return /Quick Look Data From/i.test(text) && /(Reveal|LINQ)/i.test(text); }
 function isCarelink(text) { return /Date of Interrogation/i.test(text) && /Serial Number/i.test(text); }
-function parse(text) { return isCarelink(text) ? parseCarelink(text) : parseLatitude(text); }
+function parse(text) { return isLinq(text) ? parseLinq(text) : isCarelink(text) ? parseCarelink(text) : parseLatitude(text); }
 
 /* ---------------- Rules ---------------- */
 
@@ -447,7 +515,7 @@ function evaluate(d, T) {
   var b = d.battery || {};
   if (b.status) add("critical", "Battery " + b.status, "Battery at replacement indicator", "batt");
   else if (b.years != null && b.years <= T.batteryWarn) add("warn", "Battery " + (b.text || b.years + " years") + " to explant", "≤ " + T.batteryWarn + " years", "batt");
-  else if (b.years == null) add("info", "Battery longevity not found", "Check by hand", "batt");
+  else if (b.years == null && !d.loop) add("info", "Battery longevity not found", "Check by hand", "batt");
   (d.leads || []).forEach(function (l) {
     var ch = l.chamber, hv = ch === "HV", lo = hv ? 20 : T.impLow, hi = hv ? 150 : T.impHigh;
     var z = l.impedance_ohm, zp = l.previous_impedance_ohm;
@@ -496,6 +564,7 @@ function reasonText(d) {
 var ACTIONS = ["No actions taken", "Site notified by email, report routed to working group", "Cardiologist notified, report routed and Meditech ordered"];
 
 function template(d, flags, T) {
+  if (d.loop) return loopTemplate(d);
   var inp = function (k, ph, w) { return '<input type="text" class="fill-input ' + (w || "w-long") + '" data-k="' + k + '" placeholder="' + ph + '">'; };
   var val = function (v, k, ph) { return v != null && v !== "" ? '<span class="prefilled">' + esc(v) + "</span>" : inp(k, ph, "w-short"); };
   var pl = function (n, w, many) { return n + " " + (n === 1 ? w : many || w + "s"); };
@@ -505,17 +574,17 @@ function template(d, flags, T) {
     '<select class="report-select" data-k="reason">' + ["scheduled transmission.", "patient initiation.", "patient initiation, this is the first transmission"]
       .map(function (r) { return '<option value="' + r + '">' + r + "</option>"; }).join("") + "</select>")];
   var ep = [];
-  var row = function (n, what, k) { return '<span class="nw">' + n + " " + what + (n === 1 ? " episode" : " episodes") + " noted, " + inp("det-" + k, "details from the EGM") + "</span>"; };
+  var row = function (n, what) { return n + " " + what + (n === 1 ? " episode" : " episodes") + " noted"; };
   var vhr = by(["VT", "VF", "NSVT"]);              // VT, VF and nonsustained V together
   if (vhr) ep.push("<span>" + vhr + " VHR " + (vhr === 1 ? "episode" : "episodes") + " noted, longest episode is " +
-    (d.vhr_longest ? val(d.vhr_longest) : inp("vhr-longest", "duration", "w-mid")) + ", " + inp("det-vhr", "details from the EGM") + "</span>");
+    (d.vhr_longest ? val(d.vhr_longest) : inp("vhr-longest", "duration", "w-mid")) + "</span>");
   var svt = by(["SVT"]);
   if (svt && d.source === "CareLink") ep.push("<span>" + svt + " SVT " + (svt === 1 ? "episode" : "episodes") + " noted, longest episode is " +
-    (d.svt_longest ? val(d.svt_longest) : inp("svt-longest", "duration", "w-mid")) + ", " + inp("det-svt", "details from the EGM") + "</span>");
-  else if (svt) ep.push(row(svt, "SVT", "svt"));
+    (d.svt_longest ? val(d.svt_longest) : inp("svt-longest", "duration", "w-mid")) + "</span>");
+  else if (svt) ep.push(row(svt, "SVT"));
   var ahr = by(["AHR"]);
   if (ahr) ep.push(ahr + " AHR " + (ahr === 1 ? "episode" : "episodes") + " noted, longest episode lasting " + (d.ahr_longest ? val(d.ahr_longest) : inp("ahr-longest", "duration", "w-mid")));
-  if (d.therapies_delivered && d.source !== "CareLink") ep.push('<span class="nw">' + pl(d.therapies_delivered, "therapy", "therapies") + " delivered, " + inp("det-therapy", "details from the EGM") + "</span>");
+  if (d.therapies_delivered && d.source !== "CareLink") ep.push(pl(d.therapies_delivered, "therapy", "therapies") + " delivered");
   out = out.concat(ep.length ? ep : ["No high rate episodes were noted."]);
   if (d.source === "CareLink" && d.icd)
     out.push(d.therapies_delivered ? '<span class="nw">Therapy delivered: ' + inp("det-therapy", "therapy details") + "</span>" : "No therapies delivered");
@@ -609,8 +678,8 @@ function render(host, d, T, opt) {
       '<tr class="hd"><th></th>' + (one ? '<th class="cur">Current</th>' : '<th class="cur">Daily</th><th class="old">In-office</th>').repeat(3) + "</tr>" + leadRows + "</table></div>" +
       (one ? '<div class="sub"><b class="cur">Interrogated ' + esc(d.interrogated || "") + "</b></div>"
         : '<div class="sub"><b class="cur">Daily ' + esc(d.measured || "") + '</b> (current) · <span class="old">In-office ' + esc(d.office_date || "") + "</span></div>") : "") +
-    '<div class="sub">Pacing A ' + (d.pacing_percent.atrial != null ? d.pacing_percent.atrial + "%" : "—") + " · V " + (d.pacing_percent.ventricular != null ? d.pacing_percent.ventricular + "%" : "—") +
-    (d.since_reset ? " · counters since " + esc(d.since_reset) : "") + "</div>" +
+    (d.loop ? "" : '<div class="sub">Pacing A ' + (d.pacing_percent.atrial != null ? d.pacing_percent.atrial + "%" : "—") + " · V " + (d.pacing_percent.ventricular != null ? d.pacing_percent.ventricular + "%" : "—") +
+    (d.since_reset ? " · counters since " + esc(d.since_reset) : "") + "</div>") +
     "</div></div>";
 
   var q = function (k) { return host.querySelector('[data-k="' + k + '"]'); };
@@ -802,6 +871,6 @@ function openOverlay(T) {
   });
 }
 
-var api = { parseLatitudeEvents: parseLatitudeEvents, pageIdent: pageIdent, parse: parse, parseCarelink: parseCarelink, cellSeconds: cellSeconds, lastName: lastName, durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
+var api = { parseLinq: parseLinq, parseLatitudeEvents: parseLatitudeEvents, pageIdent: pageIdent, parse: parse, parseCarelink: parseCarelink, cellSeconds: cellSeconds, lastName: lastName, durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
 if (typeof module !== "undefined" && module.exports) module.exports = api; else root.PMRemote = api;
 })(typeof window !== "undefined" ? window : this);

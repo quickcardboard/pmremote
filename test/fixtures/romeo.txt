@@ -1,0 +1,87 @@
+CareLink Network
+Clinic:
+CDN - JPOC
+Search patients
+Active Transmissions
+Reports List
+Export Status
+Summary Reports
+Advanced Search
+Transmission Schedule
+TESTPATIENT2, ROMEO2
+01-Jan-2003
+(70 yrs)
+Reveal LINQ™
+(08-May-2025)
+MyCareLink™ 24952
+ Last Data Send:
+16-Nov-2026
+Current Report
+Quick Look
+Episodes
+Trends
+Comments and Notes
+History
+Reveal LINQ™ LNQ11
+Reason for Monitoring: Syncope
+Battery Status
+Device Serial Number: TST900121G
+Date of Implant: 08-May-2025
+
+OK
+Quick Look Data From:
+10-Nov-2026 00:05 to 16-Nov-2026 00:05
+Current
+Lifetime
+Parameters
+Symptom
+0
+3
+Four 7.5 min Episodes
+Tachy
+1
+17
+>158 bpm,>=16 beats
+Pause
+0
+5
+>3 seconds
+Brady
+0
+2
+<30 bpm,>=4 beats
+AT
+0
+0
+Off
+AF
+0
+0
+Only Longest Episode
+% of Time in AT/AF
+0.0%
+---
+Observations
+· No observations
+
+ECG
+Current ECG: 16-Nov-2026 00:04:50
+Report chart.
+Tachy Episode(s)
+ID#
+Assessment
+Type
+Date
+Detected hh:mm
+Duration hh:mm:ss
+Max V. Rate
+Median V. Rate
+39
+Not Assessed
+Tachy
+12-Nov-2026
+10:27
+00:00:08
+222 bpm
+222 bpm
+Report chart.

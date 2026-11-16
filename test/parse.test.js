@@ -129,6 +129,14 @@ eq(os.vhr_longest, "2 seconds at 167 BPM", "CareLink Episodes: longest VT-NS wit
 eq([P.pageIdent(fs.readFileSync(path.join(__dirname, "fixtures", "kilo.txt"), "utf8")), P.pageIdent(fs.readFileSync(path.join(__dirname, "fixtures", "papa.txt"), "utf8")), P.pageIdent("Patient list")],
   ["CL|TST900071G|16-Nov-2026 09:55:08", "LAT|900101|19 Oct 2026 01:41", ""], "page identity for auto-close");
 
+// ---- Medtronic loop recorder
+const qb = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "quebec.txt"), "utf8"));
+eq([qb.loop, qb.device.serial, qb.battery.state, qb.counts, qb.atrial_burden_percent], [true, "TST900111G", "OK", { Symptom: 1, Tachy: 2, Pause: 8, Brady: 0, AT: 0, AF: 1 }, 0.1], "LINQ counters (Current column)");
+eq([qb.loopEp.Tachy.seconds, qb.loopEp.Tachy.vrate, qb.loopEp.Pause.seconds, qb.loopEp.Pause.listed, qb.loopEp.AF.seconds], [8, 176, 6, 8, 7320], "LINQ longest per type, each episode once");
+eq(P.evaluate(qb, P.DEFAULTS).map((f) => f.title), [], "LINQ: no alerts");
+const rm = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "romeo.txt"), "utf8"));
+eq([rm.counts.Tachy, rm.loopEp.Tachy.seconds, rm.loopEp.Tachy.vrate, rm.atrial_burden_percent, rm.patient.name], [1, 8, 222, 0, "TESTPATIENT2, ROMEO2"], "LINQ second example");
+
 // Alerts come from the daily value; N/R daily = no alert; low sensing within 20% of in-office = no alert
 const lead = (daily, office) => ({ chamber: "RV", daily: { amp: daily }, office: { amp: office } });
 const sense = (dl, of) => {
