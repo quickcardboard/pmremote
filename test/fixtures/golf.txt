@@ -1,0 +1,29 @@
+Patient: TESTPATIENT, GOLF
+Device: L331 ACCOLADE MRI EL/900041
+Search Tags: RMH
+My Alerts
+15 Nov 2026 17:54	Right ventricular intrinsic amplitude out of range.
+Leads (View detail)
+Most Recent Daily Measurement (14 Nov 2026)	Most Recent In-Office Measurement (13 Jul 2026)
+Atrial
+Intrinsic Amplitude	4.8 mV	4.8 mV
+Pace Impedance	614 Ω	656 Ω
+Pace Threshold	0.5 V @ 0.4 ms	0.6 V @ 0.4 ms
+Ventricular
+Intrinsic Amplitude	N/R	3.0 mV
+Pace Impedance	527 Ω	533 Ω
+Pace Threshold	0.8 V @ 0.4 ms	0.7 V @ 0.4 ms
+Battery
+Approximate time to explant: 5 years from 16 Nov 2026
+AT/AF Overview (Generate report)
+Atrial Arrhythmia
+AT/AF	<1 %
+AT/AF Events	9
+Total Time in AT/AF (hr)	1.3
+Longest (15 Nov 2026 19:44)
+Avg V Rate, Duration (hh:mm:ss)	81 min-1, 02:33:50
+Percent Paced
+Atrial	19 %
+Ventricular	99 %
+Settings
+Mode	DDDR

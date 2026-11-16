@@ -13,7 +13,7 @@ eq(a.device.mode, "DDIR", "mode");
 eq(a.device_alerts, ["Atrial intrinsic amplitude out of range."], "alerts");
 eq(a.reason, "amplitude_oor", "reason");
 const ra = a.leads.find((l) => l.chamber === "RA"), rv = a.leads.find((l) => l.chamber === "RV");
-eq([ra.amplitude_mv, ra.impedance_ohm, ra.previous_impedance_ohm, ra.threshold_v], [0.9, 700, 674, 0.6], "RA");
+eq([ra.amplitude_mv, ra.impedance_ohm, ra.previous_impedance_ohm, ra.threshold_v, ra.office.thr.v], [0.9, 700, 674, undefined, 0.6], "RA: daily threshold N/R, in-office kept for display");
 eq([rv.amplitude_mv, rv.amplitude_op, rv.impedance_ohm, rv.previous_impedance_ohm, rv.threshold_v], [25, ">", 492, 479, 0.7], "RV");
 eq(a.battery.years, 7.5, "battery");
 eq(a.pacing_percent, { atrial: 3, ventricular: 100 }, "paced");
@@ -51,8 +51,8 @@ eq(fc, ["critical: RV impedance 1100 Ω", "warn: Battery 0.8 years to explant", 
   "warn: RA threshold 1.8 V @ 0.4 ms (last check 1 V)"], "charlie flags: RV 2.0 V within 0.25 V of 1.9 V is not flagged");
 
 // Durations round to the nearest hour, minute or second
-eq([P.fmtDur(42), P.fmtDur(59.4), P.fmtDur(90), P.fmtDur(3569), P.fmtDur(5400), P.fmtDur(7600)],
-  ["42 seconds", "59 seconds", "2 minutes", "59 minutes", "2 hours", "2 hours"], "fmtDur");
+eq([P.fmtDur(42), P.fmtDur(59.4), P.fmtDur(90), P.fmtDur(3569), P.fmtDur(5400), P.fmtDur(7600), P.fmtDur(9230), P.fmtDur(3700)],
+  ["42 seconds", "59 seconds", "2 minutes", "59 minutes", "1.5 hours", "2 hours", "2.5 hours", "1 hour"], "fmtDur");
 eq([P.durSeconds("01:02:03"), P.durSeconds("2 hr 5 min"), P.durSeconds("12", "min"), P.durSeconds("N/R")], [3723, 7500, 720, null], "durSeconds");
 
 const junk = P.parseLatitude("hello world");
@@ -67,10 +67,10 @@ eq(fd, ["warn: No clinic in search tags"], "delta flags");
 const e = load("echo.txt");
 const era = e.leads.find((l) => l.chamber === "RA"), erv = e.leads.find((l) => l.chamber === "RV");
 eq([era.impedance_ohm, era.previous_impedance_ohm, erv.impedance_ohm, erv.previous_impedance_ohm], [763, 750, 677, 658], "ohm sign U+2126");
-eq([era.daily.thr, era.office.thr.v, era.threshold_v, era.previous_threshold_v], [null, 1.0, 1.0, undefined], "daily N/R kept as N/R; current falls back to in-office");
+eq([era.daily.thr, era.office.thr.v, era.threshold_v], [null, 1.0, undefined], "daily N/R: no alert value, in-office shown");
 eq([era.daily.amp.v, era.office.amp.v], [0.8, 0.4], "daily and in-office side by side");
 eq(e.office_date, "21 Sep 2026", "in-office date");
-eq(e.ahr_longest, "7 hours", "06:41:40 rounds to 7 hours");
+eq(e.ahr_longest, "6.5 hours", "06:41:40 rounds to the nearest half hour");
 eq(e.atrial_burden_percent, 98, "burden");
 eq(P.evaluate(e, P.DEFAULTS).map((f) => f.title), ["AT/AF burden 98%"], "echo flags: P wave 0.8 ignored with burden 98%");
 eq([P.lastName("TESTPATIENT, ALPHA"), P.lastName("O'NEIL-SMITH, MARY ANN"), P.lastName("Mary Testpatient")], ["TESTPATIENT", "O'NEIL-SMITH", "Testpatient"], "last name");
@@ -80,4 +80,18 @@ eq(fx.daily_first, true, "Daily column stored first");
 eq([fra.daily.amp.v, fra.office.amp.v, fra.daily.imp.v, fra.office.imp.v, fra.daily.thr, fra.office.thr.v], [5.8, 3.1, 664, 648, null, 0.5], "RA daily/in-office");
 eq([frv.daily.amp.v, frv.office.amp.v, frv.daily.thr.v, frv.office.thr.v, frv.office.thr.auto], [17.5, 14.4, 0.6, 0.8, true], "RV daily/in-office");
 eq([a.daily_first, e.daily_first], [false, false], "In-Office-first pages unchanged");
+const g = load("golf.txt");
+eq(g.ahr_longest, "2.5 hours", "02:33:50 -> 2.5 hours");
+eq(P.evaluate(g, P.DEFAULTS).map((f) => f.title), [], "RV R wave daily N/R: no alert (in-office 3.0 mV ignored)");
+// Alerts come from the daily value; N/R daily = no alert; low sensing within 20% of in-office = no alert
+const lead = (daily, office) => ({ chamber: "RV", daily: { amp: daily }, office: { amp: office } });
+const sense = (dl, of) => {
+  const L = lead(dl == null ? null : { v: dl, op: "" }, of == null ? null : { v: of, op: "" });
+  if (L.daily.amp) { L.amplitude_mv = dl; L.amplitude_op = ""; if (of != null) L.previous_amplitude_mv = of; }
+  return P.evaluate({ device: {}, battery: { years: 5 }, leads: [L], site: "DH", tags: [], episodes: [], device_alerts: [], device_notes: [], pacing_percent: {} }, P.DEFAULTS).map((f) => f.title);
+};
+eq(sense(null, 3.0), [], "daily N/R: no alert even with a low in-office value");
+eq(sense(4.5, 5.0), [], "4.5 vs 5.0 mV (10%): no alert");
+eq(sense(3.5, 5.0), ["RV R wave 3.5 mV"], "3.5 vs 5.0 mV (30%): alert");
+eq(sense(3.0, null), ["RV R wave 3 mV"], "no in-office value: alert");
 console.log("ok", n, "checks");

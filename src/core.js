@@ -4,11 +4,12 @@
 "use strict";
 
 var SITES = ["LMH", "JPOCSC", "SMH", "ERH", "DH", "PAH", "RMH", "ARH"];
-var DEFAULTS = { impLow: 200, impHigh: 1000, impChangePct: 20, pMin: 1.0, pIgnoreBurden: 50, rMin: 5, thrMax: 1.5, thrDelta: 0.25, burdenWarn: 20, batteryWarn: 1 };
+var DEFAULTS = { impLow: 200, impHigh: 1000, impChangePct: 20, pMin: 1.0, pIgnoreBurden: 50, rMin: 5, thrMax: 1.5, thrDelta: 0.25, senseChangePct: 20, burdenWarn: 20, batteryWarn: 1 };
 var THR_LABELS = [
   ["impLow", "Pacing lead impedance low (Ω)"], ["impHigh", "Pacing lead impedance high (Ω)"],
   ["impChangePct", "Impedance change since last check (%)"], ["pMin", "P wave below (mV)"], ["rMin", "R wave below (mV)"],
   ["thrMax", "Capture threshold above (V)"], ["thrDelta", "…unless within (V) of last check"],
+  ["senseChangePct", "Low sensing ignored when within (%) of in-office"],
   ["pIgnoreBurden", "Ignore low P wave when AT/AF burden above (%)"], ["burdenWarn", "AT/AF burden above (%)"], ["batteryWarn", "Battery at or below (years)"]
 ];
 
@@ -99,11 +100,11 @@ function parseLatitude(text) {
     else if (cells.length === 1) ld.daily[kind] = cells[0];
   }
   Object.keys(leads).forEach(function (c) {
-    var l = leads[c], cur = function (k) { return l.daily[k] || l.office[k] || null; };
-    var am = cur("amp"), im = cur("imp"), th = cur("thr");
-    if (am) { l.amplitude_mv = am.v; l.amplitude_op = am.op; }
-    if (im) { l.impedance_ohm = im.v; if (l.daily.imp && l.office.imp) l.previous_impedance_ohm = l.office.imp.v; }
-    if (th) { l.threshold_v = th.v; l.threshold_pw_ms = th.pw; if (l.daily.thr && l.office.thr) l.previous_threshold_v = l.office.thr.v; }
+    // Alert values are the most recent daily ones only (N/R = no alert); in-office is the comparison.
+    var l = leads[c], am = l.daily.amp, im = l.daily.imp, th = l.daily.thr;
+    if (am) { l.amplitude_mv = am.v; l.amplitude_op = am.op; if (l.office.amp) l.previous_amplitude_mv = l.office.amp.v; }
+    if (im) { l.impedance_ohm = im.v; if (l.office.imp) l.previous_impedance_ohm = l.office.imp.v; }
+    if (th) { l.threshold_v = th.v; l.threshold_pw_ms = th.pw; if (l.office.thr) l.previous_threshold_v = l.office.thr.v; }
   });
   d.leads = order.map(function (c) { return leads[c]; });
 
@@ -182,14 +183,15 @@ function durSeconds(text, unit) {
   if (/^s/.test(uh)) return n;
   return null;
 }
-// Round to the nearest hour, minute or second, whichever applies.
+// Round to the nearest half hour, minute or second, whichever applies.
 function fmtDur(sec) {
   if (sec == null || !isFinite(sec) || sec <= 0) return null;
   var pl = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
   if (sec < 59.5) return pl(Math.max(1, Math.round(sec)), "second");
   var m = Math.round(sec / 60);
   if (m < 60) return pl(m, "minute");
-  return pl(Math.round(sec / 3600), "hour");
+  var h = Math.round(sec / 1800) / 2;
+  return h + " hour" + (h === 1 ? "" : "s");
 }
 
 // One measurement row -> cells in column order. Each cell is null (N/R) or {v, op, pw, auto}.
@@ -224,11 +226,12 @@ function evaluate(d, T) {
       var pct = Math.round(Math.abs(z - zp) / zp * 100);
       if (pct > T.impChangePct) add("warn", ch + " impedance " + (z > zp ? "rose" : "fell") + " " + zp + " → " + z + " Ω (" + pct + "%)", "Change > " + T.impChangePct + "% since last check", "imp");
     }
-    var a = l.amplitude_mv;
-    if (a != null && l.amplitude_op !== ">") {
+    var a = l.amplitude_mv, ap = l.previous_amplitude_mv;
+    var steady = a != null && ap ? Math.abs(a - ap) / ap * 100 <= T.senseChangePct : false;
+    if (a != null && l.amplitude_op !== ">" && !steady) {
       var inAF = d.device.mode === "DDIR" || (d.atrial_burden_percent != null && d.atrial_burden_op !== "<" && d.atrial_burden_percent > T.pIgnoreBurden);
-      if (ch === "RA" && a < T.pMin && !inAF) add("warn", "P wave " + a + " mV", "< " + T.pMin + " mV (not DDIR, burden ≤ " + T.pIgnoreBurden + "%)", "sense");
-      if ((ch === "RV" || ch === "LV") && a < T.rMin) add("warn", ch + " R wave " + a + " mV", "< " + T.rMin + " mV", "sense");
+      if (ch === "RA" && a < T.pMin && !inAF) add("warn", "P wave " + a + " mV", "< " + T.pMin + " mV (not DDIR, burden ≤ " + T.pIgnoreBurden + "%)" + (ap ? ", in-office " + ap + " mV" : ""), "sense");
+      if ((ch === "RV" || ch === "LV") && a < T.rMin) add("warn", ch + " R wave " + a + " mV", "< " + T.rMin + " mV" + (ap ? ", in-office " + ap + " mV" : ""), "sense");
     }
     var tv = l.threshold_v, tp = l.previous_threshold_v;
     if (tv != null && !hv && tv > T.thrMax && !(tp != null && Math.abs(tv - tp) <= T.thrDelta + 1e-9))
@@ -359,11 +362,10 @@ function render(host, d, T, opt) {
     (d.recognised ? '<label class="ini">Tech initials <input type="text" class="fill-input w-short" data-k="initials" maxlength="12" autocomplete="off"></label>' : "") +
     '<div class="btns"><button class="b p" data-a="copy">Copy report</button>' +
     (d.patient.name ? '<button class="b" data-a="name">Copy name</button>' : "") +
-    (d.device.serial ? '<button class="b" data-a="serial">Copy serial</button>' : "") +
     '<span class="msg" data-k="msg"></span></div>' +
     (leadRows ? '<div class="tw"><table><tr><th></th><th colspan="2">Sensing</th><th colspan="2">Impedance</th><th colspan="2">Threshold</th></tr>' +
       '<tr class="hd"><th></th>' + '<th class="cur">Daily</th><th class="old">In-office</th>'.repeat(3) + "</tr>" + leadRows + "</table></div>" +
-      '<div class="sub"><b class="cur">Daily</b> ' + esc(d.measured || "") + ' (current) · <span class="old">In-office ' + esc(d.office_date || "") + "</span></div>" : "") +
+      '<div class="sub"><b class="cur">Daily ' + esc(d.measured || "") + '</b> (current) · <span class="old">In-office ' + esc(d.office_date || "") + "</span></div>" : "") +
     '<div class="sub">Pacing A ' + (d.pacing_percent.atrial != null ? d.pacing_percent.atrial + "%" : "—") + " · V " + (d.pacing_percent.ventricular != null ? d.pacing_percent.ventricular + "%" : "—") +
     (d.since_reset ? " · counters since " + esc(d.since_reset) : "") + "</div>" +
     "</div></div>";
@@ -386,7 +388,6 @@ function render(host, d, T, opt) {
       copy(host, reportText(host.querySelector(".text-block")) + (ini ? "\n\n" + ini : ""), function (ok) { msg(ok ? "Report copied." : "Copy failed: select the report text and press Ctrl+C.", !ok); });
     }
     if (a === "name") copy(host, lastName(d.patient.name), function (ok) { msg(ok ? "Last name copied for the Paceart search." : "Copy failed.", !ok); });
-    if (a === "serial") copy(host, d.device.serial, function (ok) { msg(ok ? "Serial copied for the Paceart search." : "Copy failed.", !ok); });
   });
   return { flags: flags, text: function () { return reportText(host.querySelector(".text-block")); } };
 }
