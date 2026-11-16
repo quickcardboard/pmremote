@@ -1,39 +1,47 @@
 # PM Remote
 
-Reads a pacemaker or implantable loop recorder remote transmission (screenshot, PDF or pasted text),
-flags out-of-range values, and fills the clinic's report template ready to paste into Paceart.
+Reads a Boston Scientific LATITUDE **Summary** page, flags values outside the clinic's thresholds and fills
+the remote-transmission report template, ready to paste into Paceart. Everything runs in the browser:
+no server, no upload, no AI.
 
-## How it works
+## Use
 
-1. **Input**: drop screenshots or a PDF (first 4 pages are rendered), paste a screenshot, or paste text.
-   Drag across an image to black out patient identifiers; only the blacked-out image is sent.
-2. **Extraction**: Claude reads the transmission and returns structured JSON (battery, leads, pacing %,
-   atrial burden, episodes, device alerts) with a note of where each value was read from.
-3. **Flags**: fixed rules in the page compare the values with editable thresholds (saved per browser).
-   Flags never come from the model's judgement.
-4. **Report**: the values fill the author's templates (pacemaker remote, loop recorder). Flagged lead lines
-   replace "Lead impedance stable" / "Sensing and capture within range"; the action line must be chosen
-   by hand when anything is flagged. "Copy report" copies the plain text.
+- **Bookmarklet** (main route): open `index.html` (GitHub Pages), drag the **PM Remote** button to the
+  bookmarks bar, then click it on a patient's LATITUDE Summary page. A panel opens over the page with the
+  flags, the filled template, and buttons to copy the report, the patient name or the device serial.
+- **Paste**: on the Summary page press Ctrl+A, Ctrl+C and paste into the page's box.
 
-## Files
+Thresholds and the default appointment site are set on the page and built into the bookmarklet
+(drag it again after changing them).
 
-- `src/app.html`: the app (published as a claude.ai Artifact, which supplies the Claude call through
-  the `sample` capability).
-- `index.html`: the same page in a standalone HTML shell. Outside claude.ai it shows the example and
-  the template but cannot read transmissions yet (it needs an API backend).
+## What is read (LATITUDE Summary)
 
-## Default thresholds
+Patient name, device model and serial, search tags (appointment site from the tag; ADVISORY noted), My Alerts
+(sets the transmission reason), per-chamber intrinsic amplitude, pace impedance (latest and in-office), pace
+threshold, battery time to explant, AT/AF %, AT/AF events, VT/SVT/NSVT/atrial > 48 h counts, percent paced,
+mode, and device messages such as "disabled by the Signal Artifact Monitor".
+
+## Rules (defaults, editable)
 
 | Rule | Default |
 | --- | --- |
 | Pacing lead impedance | < 200 or > 2000 Ω (critical) |
-| Impedance change vs previous | > 30% |
-| P wave | < 1.5 mV |
-| R wave | < 5 mV |
-| Capture threshold | > 2.5 V, or output < 2× threshold |
+| Impedance change vs in-office | > 30% |
+| P wave / R wave | < 1.5 mV / < 5 mV |
+| Capture threshold | > 2.5 V |
 | Ventricular pacing | > 40% |
-| Atrial burden | ≥ 1% |
-| Battery | ≤ 1 year, or ERI/RRT/EOS (critical) |
-| Episodes | VT/VF/pause/therapy critical; NSVT, VHR, AHR, SVT, AF, brady, symptom review |
+| AT/AF burden | ≥ 1% |
+| Battery | ≤ 1 year (critical at explant indicator) |
+| Episodes | VT/VF and therapies critical; NSVT, SVT, AT/AF events, atrial > 48 h review |
+
+Flagged impedance or sensing replaces the fixed "Lead impedance stable" / "Sensing and capture within range"
+line, and the action line must be chosen by hand when anything is flagged.
+
+## Develop
+
+- `src/core.js`: parser, rules, template, panel (also loads in Node).
+- `src/page.html`: the web page; `node tools/build.js` builds `index.html` and embeds the bookmarklet.
+- `node test/parse.test.js`: parser and rule checks on the fictional pages in `test/fixtures/`.
+  Never commit real patient pages or screenshots.
 
 This is a drafting aid. Every report is read and signed by a clinician.

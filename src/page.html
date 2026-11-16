@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PM Remote</title>
+<meta name="robots" content="noindex">
+<style>
+:root { --bg: #f3f5f6; --panel: #fff; --fg: #17232b; --muted: #5a6b75; --line: #d6dee2; --accent: #0f5e7a }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 60px }
+h1 { font-size: 22px; margin: 0 0 4px } h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 10px }
+.lede { color: var(--muted); margin: 0 0 20px; max-width: 70ch }
+.grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 16px; align-items: start }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr) } }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0 }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px }
+ol { margin: 0; padding-left: 20px } li + li { margin-top: 6px }
+.bm { display: inline-block; margin: 10px 0 4px; padding: 8px 16px; background: var(--accent); color: #fff; border-radius: 6px; text-decoration: none; font-weight: 600; cursor: grab }
+.hint { font-size: 13px; color: var(--muted); margin: 6px 0 0 }
+textarea { width: 100%; min-height: 140px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: var(--bg); color: var(--fg); resize: vertical }
+.thr { display: grid; grid-template-columns: minmax(0, 1fr) 7em; gap: 6px 12px; align-items: center; font-size: 14px }
+.thr input, .thr select { font: 14px ui-monospace, Menlo, Consolas, monospace; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; width: 100% }
+.btn { font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line); background: #fff; cursor: pointer }
+.btn.p { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600 }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px }
+.tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #8a5200; background: #fdf1dc; padding: 2px 8px; border-radius: 4px; margin-left: 6px }
+details summary { cursor: pointer; font-weight: 600 }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PM Remote</h1>
+  <p class="lede">Reads a LATITUDE Summary page, flags values outside your thresholds and fills your remote-transmission template.
+    Everything runs in your browser: nothing is sent anywhere and no AI is used.</p>
+  <div class="grid">
+    <div class="col">
+      <section class="panel">
+        <h2>Set up once</h2>
+        <ol>
+          <li>Show your bookmarks bar (Ctrl+Shift+B).</li>
+          <li>Drag this button onto it:<br><a class="bm" id="bm" href="#">PM Remote</a></li>
+          <li>On a patient's LATITUDE <b>Summary</b> page, click <b>PM Remote</b>. A panel opens with the flags and your filled report.</li>
+        </ol>
+        <p class="hint">After changing the thresholds below, drag the button again and delete the old one: the settings are built into it.</p>
+      </section>
+      <section class="panel">
+        <h2>Or paste the page</h2>
+        <p class="hint" style="margin:0 0 8px">On the LATITUDE Summary page press Ctrl+A, then Ctrl+C, and paste here.</p>
+        <textarea id="paste" placeholder="Paste the LATITUDE Summary page here"></textarea>
+        <div class="row"><button class="btn p" id="read">Read</button><button class="btn" id="example">Load example</button></div>
+      </section>
+      <section class="panel">
+        <details id="settings">
+          <summary>Alert thresholds</summary>
+          <div class="thr" id="thr" style="margin-top:12px"></div>
+          <div class="row"><button class="btn" id="reset">Restore defaults</button></div>
+        </details>
+      </section>
+    </div>
+    <div class="col">
+      <section class="panel"><h2>Report <span id="extag"></span></h2><div id="out"></div></section>
+    </div>
+  </div>
+</div>
+<script>
+/*CORE*/
+</script>
+<script>
+(function () {
+  var CORE_SRC = /*CORE_JSON*/"";
+  var EXAMPLE = /*EXAMPLE_JSON*/"";
+  var P = window.PMRemote, $ = function (id) { return document.getElementById(id); };
+  var get = function () { try { return Object.assign({}, P.DEFAULTS, JSON.parse(localStorage.getItem("pmr.thr") || "{}")); } catch (e) { return Object.assign({}, P.DEFAULTS); } };
+  var T = get();
+  var save = function () { try { localStorage.setItem("pmr.thr", JSON.stringify(T)); } catch (e) {} };
+
+  function bookmarklet() {
+    var code = "(function(){" + CORE_SRC + "\nPMRemote.openOverlay(" + JSON.stringify(T) + ");})();";
+    $("bm").href = "javascript:" + encodeURIComponent(code);
+  }
+  $("bm").addEventListener("click", function (e) { e.preventDefault(); alert("Drag this button to your bookmarks bar, then click it on a LATITUDE Summary page."); });
+
+  function settings() {
+    var h = $("thr"); h.innerHTML = "";
+    P.THR_LABELS.forEach(function (x) {
+      var l = document.createElement("label"); l.textContent = x[1]; l.htmlFor = "t-" + x[0];
+      var i = document.createElement("input"); i.type = "number"; i.step = "any"; i.id = "t-" + x[0]; i.value = T[x[0]];
+      i.onchange = function () { var v = parseFloat(i.value); if (isFinite(v)) { T[x[0]] = v; save(); bookmarklet(); show(); } };
+      h.append(l, i);
+    });
+    var l = document.createElement("label"); l.textContent = "Default appointment site (when no site tag)"; l.htmlFor = "t-site";
+    var s = document.createElement("select"); s.id = "t-site";
+    P.SITES.forEach(function (x) { s.add(new Option(x, x)); }); s.value = T.site;
+    s.onchange = function () { T.site = s.value; save(); bookmarklet(); show(); };
+    h.append(l, s);
+  }
+  $("reset").onclick = function () { T = Object.assign({}, P.DEFAULTS); save(); settings(); bookmarklet(); show(); };
+
+  var current = null, isExample = false;
+  function show() {
+    $("extag").innerHTML = isExample ? '<span class="tag">Example, fictional patient</span>' : "";
+    if (!current) { $("out").innerHTML = '<p class="hint">Paste a LATITUDE Summary page, or load the example.</p>'; return; }
+    P.render($("out"), P.parseLatitude(current), T);
+  }
+  $("read").onclick = function () { current = $("paste").value; isExample = false; show(); };
+  $("example").onclick = function () { current = EXAMPLE; isExample = true; show(); };
+
+  settings(); bookmarklet();
+  current = EXAMPLE; isExample = true; show();
+})();
+</script>
+</body>
+</html>

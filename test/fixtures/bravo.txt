@@ -1,0 +1,78 @@
+Patient: TESTPATIENT, BRAVO
+Device: L331 ACCOLADE MRI
+EL/900003
+Search Tags: ACCOLADE ADVISORY JPOCSC
+Date of Birth: 02 Feb 1966
+Monitoring Status: Monitored
+Summary
+Leads
+Events
+Leads (View detail)
+Most Recent In-Office Measurement (14 Aug 2026)
+Most Recent Daily Measurement (15 Nov 2026)
+Atrial
+Intrinsic Amplitude
+N/R
+N/R
+(14 Nov 2026)
+Pace Impedance
+476 Ω
+482 Ω
+(14 Nov 2026)
+Pace Threshold
+N/R
+N/R
+Ventricular
+Intrinsic Amplitude
+15.2 mV
+3.7 mV
+(14 Nov 2026)
+Pace Impedance
+362 Ω
+569 Ω
+(14 Nov 2026)
+Pace Threshold
+Auto 0.8 V @
+0.4 ms
+0.9 V @ 0.4 ms
+(14 Nov 2026)
+Battery
+Approximate time to explant: 8.5 years from 16 Nov 2026
+One Year Remaining
+Explant
+Magnet Rate
+100 min-1
+AT/AF Overview (Generate report)
+Since Last Reset
+14 Aug 2026
+Atrial Arrhythmia
+AT/AF (One Year of Data)
+4.5 %
+AT/AF Events
+3
+Events (View detail)
+Since Last Reset
+14 Aug 2026
+Event Counts
+VT Episodes (V>A)
+0
+SVT Episodes (V<=A)
+2
+NonsustainedV Episodes
+1
+Atrial Episodes > 48 hr
+0
+MRI Protection Mode
+0
+Percent Paced
+Atrial
+0 %
+Ventricular
+23 %
+Settings Summary (Generate report)
+The MV Sensor has been disabled by the Signal Artifact Monitor (SAM) device diagnostic.
+Settings
+Mode
+VVIR
+LRL - MSR
+55 - 130 min-1

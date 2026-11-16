@@ -1,0 +1,60 @@
+Patient: TESTPATIENT, ALPHA	Clinic (Primary)
+Device: L331 ACCOLADE MRI EL/900001	Search Tags: PAH ADVISORY PATIENT
+Date of Birth: 01 Jan 1940	Monitoring Status: Monitored
+Age, Gender: 86,
+Summary	Leads	Events	Patient Diagnostics	Health	Follow-up History
+My Alerts
+15 Nov 2026 18:51	Atrial intrinsic amplitude out of range.
+For Technical Support contact 1-800-CARDIAC (Americas) or your local Boston Scientific Representative.
+Leads (View detail)
+	Most Recent In-Office Measurement (29 Sep 2026)	Most Recent Daily Measurement (15 Nov 2026)
+Atrial
+Intrinsic Amplitude	0.7 mV	0.9 mV
+(14 Nov 2026)
+Pace Impedance	674 Ω	700 Ω
+(14 Nov 2026)
+Pace Threshold	Auto 0.6 V @
+0.4 ms
+(26 Apr 2024)	N/R
+Ventricular
+Intrinsic Amplitude	N/R	>25.0 mV
+(14 Nov 2026)
+Pace Impedance	479 Ω	492 Ω
+(14 Nov 2026)
+Pace Threshold	0.7 V @ 0.4 ms	0.7 V @ 0.4 ms
+(14 Nov 2026)
+Battery
+Approximate time to explant: 7.5 years from 16 Nov 2026
+One Year Remaining
+Explant
+Magnet Rate	100 min-1
+AT/AF Overview (Generate report)
+	Since Last Reset
+29 Sep 2026
+Atrial Arrhythmia
+AT/AF	N/R %
+AT/AF Events	0
+Total Time in AT/AF	N/R
+There are no ATR events to display.
+Health (View detail)
+Most Recent Daily Measurement (15 Nov 2026)
+Implanted Device Measures
+Respiratory Rate	15 min-1
+Mean Heart Rate	N/R
+Events (View detail)
+Since Last Reset
+29 Sep 2026
+Event Counts
+VT Episodes (V>A)	0
+SVT Episodes (V<=A)	0
+NonsustainedV Episodes	0
+Atrial Episodes > 48 hr	0
+MRI Protection Mode	0
+Percent Paced
+Atrial	3 %
+Ventricular	100 %
+Settings Summary (Generate report)
+Settings
+Mode	DDIR
+LRL - MSR	60 - 130 min-1
+Paced AV Delay	140 - 200 ms
