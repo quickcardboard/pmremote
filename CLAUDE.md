@@ -6,3 +6,5 @@ asked for deterministic parsing only. Never commit real patient data; test fixtu
 - Edit `src/core.js` / `src/page.html`, then `node tools/build.js` and commit the rebuilt `index.html`.
 - Run `node test/parse.test.js` after any parser or rule change.
 - Keep the author's template wording (pacemaker remote and loop recorder) as given.
+- Push routine changes straight to `main` for the user to test (fast-forward from the working branch).
+  Ask first only for a significant UI or engine change.
