@@ -58,10 +58,14 @@ function parseLatitude(text) {
   // Alerts: between "My Alerts" and the support line / Leads header
   var a0 = L.findIndex(function (s) { return /^My Alerts$/i.test(s); });
   if (a0 >= 0) {
+    var newAlert = true;
     for (var i = a0 + 1; i < L.length; i++) {
       if (/^(For Technical Support|Leads\b)/i.test(L[i])) break;
-      if (new RegExp("^" + DATE + "(?: \\d{1,2}:\\d{2})?$").test(L[i])) continue;
-      d.device_alerts.push(L[i]);
+      // each alert starts after its date/time; text that wraps onto more lines belongs to the same alert
+      if (new RegExp("^" + DATE + "(?: \\d{1,2}:\\d{2})?$").test(L[i])) { newAlert = true; continue; }
+      if (newAlert || !d.device_alerts.length) d.device_alerts.push(L[i]);
+      else d.device_alerts[d.device_alerts.length - 1] += " " + L[i];
+      newAlert = false;
     }
   }
 
@@ -145,9 +149,19 @@ function parseLatitude(text) {
   d.atrial_total_seconds = tt ? durSeconds(tt[2], tt[1]) : null;
   var ahrN = (d.episodes.filter(function (e) { return e.type === "AHR"; })[0] || {}).count;
   d.ahr_longest = ahrN === 1 && d.atrial_total_seconds ? fmtDur(d.atrial_total_seconds) : null;
-  // The overview lists "Longest (date) / Avg V Rate, Duration (hh:mm:ss) / 69 min-1, 00:00:07": use it when present.
-  var lg = (ov >= 0 ? J.slice(ov, ov + 900) : "").match(/(?:^|\n)Longest\b[^\n]*\n[\s\S]{0,160}?Duration[\s\S]{0,80}?(\d+:\d{2}:\d{2})/i);
-  if (lg) d.ahr_longest = fmtDur(durSeconds(lg[1])) || d.ahr_longest;
+  // The overview lists "Longest (date)" / "Avg V Rate, Duration (hh:mm:ss)" / "69 min-1, 00:00:07" (or ">48 Hours").
+  // Read only the value under "Longest", never the next entry (Fastest).
+  var li = ov >= 0 ? L.findIndex(function (s, i) { return i > 0 && /^Longest\b/i.test(s) && J.indexOf(s) >= ov; }) : -1;
+  if (li >= 0) {
+    for (var lk = li + 1; lk <= li + 3 && lk < L.length; lk++) {
+      if (/^(Fastest|Most Recent)\b/i.test(L[lk])) break;
+      var lv = L[lk].replace(/^.*Duration\s*\([^)]*\)/i, "");
+      var gt = lv.match(/([<>])\s*(\d+(?:\.\d+)?)\s*(hours?|hrs?|days?|minutes?|mins?)/i);
+      var hms = lv.match(/\b(\d+:\d{2}:\d{2})\b/);
+      if (gt) { var u = gt[3].toLowerCase()[0]; d.ahr_longest = gt[1] + gt[2] + (u === "h" ? " hours" : u === "d" ? " days" : " minutes"); break; }
+      if (hms) { d.ahr_longest = fmtDur(durSeconds(hms[1])) || d.ahr_longest; break; }
+    }
+  }
   var shocks = cnt(/Shocks?(?: Delivered)?\s+(\d+)/i), atp = cnt(/ATP(?: Delivered| Therapies)?\s+(\d+)/i);
   d.therapies_delivered = (shocks || 0) + (atp || 0) || null;
 

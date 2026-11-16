@@ -83,6 +83,10 @@ eq([a.daily_first, e.daily_first], [false, false], "In-Office-first pages unchan
 const g = load("golf.txt");
 eq(g.ahr_longest, "2.5 hours", "02:33:50 -> 2.5 hours");
 eq(P.evaluate(g, P.DEFAULTS).map((f) => f.title), [], "RV R wave daily N/R: no alert (in-office 3.0 mV ignored)");
+const ht = load("hotel.txt");
+eq(ht.ahr_longest, ">48 hours", "Longest '>48 Hours' kept; Fastest 20:08:45 not used");
+eq(ht.device_alerts, ["Atrial Arrhythmia Burden of at least 24.0 hours in a 24 hour period between 14 Nov 2026 01:21 and 15 Nov 2026 01:21."], "wrapped alert joined");
+eq(ht.reason, "atrial_burden", "reason");
 // Alerts come from the daily value; N/R daily = no alert; low sensing within 20% of in-office = no alert
 const lead = (daily, office) => ({ chamber: "RV", daily: { amp: daily }, office: { amp: office } });
 const sense = (dl, of) => {

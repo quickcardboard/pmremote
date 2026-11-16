@@ -1,0 +1,38 @@
+Patient: TESTPATIENT, HOTEL
+Device: L331 ACCOLADE MRI EL/900051
+Search Tags: ERH
+My Alerts
+15 Nov 2026 01:21	Atrial Arrhythmia Burden of at least 24.0 hours in a 24 hour period between 14 Nov 2026
+01:21 and 15 Nov 2026 01:21.
+For Technical Support contact 1-800-CARDIAC (Americas) or your local Boston Scientific Representative.
+Leads (View detail)
+Most Recent Daily Measurement (13 Nov 2026)	Most Recent In-Office Measurement (10 Jul 2026)
+Atrial
+Intrinsic Amplitude	1.7 mV	2.5 mV
+Pace Impedance	578 Ω	597 Ω
+Pace Threshold	N/R	0.4 V @ 0.4 ms
+Ventricular
+Intrinsic Amplitude	N/R	14.9 mV
+Pace Impedance	552 Ω	566 Ω
+Pace Threshold	1.0 V @ 0.4 ms	0.9 V @ 0.4 ms
+Battery
+Approximate time to explant: 10.5 years from 15 Nov 2026
+AT/AF Overview (Generate report)
+Atrial Arrhythmia
+AT/AF	11 %
+AT/AF Events	403
+Total Time in AT/AF (days)	13.4
+Most Recent (14 Nov 2026 17:02)
+Avg V Rate, Duration (hh:mm:ss)	71 min-1, 06:26:34
+Longest (04 Nov 2026 17:28)
+Avg V Rate, Duration (hh:mm:ss)	71 min-1, >48 Hours
+Fastest VS Rate (10 Nov 2026 17:36)
+Max V Rate, Duration (hh:mm:ss)	136 min-1, 20:08:45
+Event Counts
+VT Episodes (V>A)	0
+Atrial Episodes > 48 hr	1
+Percent Paced
+Atrial	67 %
+Ventricular	73 %
+Settings
+Mode	DDDR
