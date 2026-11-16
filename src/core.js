@@ -244,24 +244,40 @@ var MDATE = "\\d{1,2}-[A-Z][a-z]{2,3}-\\d{4}";
 // "<0.1%" -> {v: 0.1, op: "<"}
 function pct(s) { var m = String(s || "").match(/([<>]?)\s*(\d+(?:\.\d+)?)\s*%/); return m ? { v: +m[2], op: m[1] } : null; }
 
-// Duration cell from the Episodes list: ":01" = 1 s, ":01:21" = 81 s, "24:17:18" = 24 h 17 min 18 s
+// Duration cell from the Episodes list: ":01" = 1 s, ":01:21" = 81 s, "24:17:18" = 24 h 17 min 18 s, "<:01" = under 1 s
 function cellSeconds(s) {
+  s = String(s || "");
+  var lt = s.charAt(0) === "<";
+  if (lt) s = s.slice(1);
   if (!/^\d*:\d{2}(?::\d{2})?$/.test(s)) return null;
-  return s.split(":").reduce(function (a, v) { return a * 60 + (+v || 0); }, 0);
+  var v = s.split(":").reduce(function (a, x) { return a * 60 + (+x || 0); }, 0);
+  return lt ? v - 0.5 : v;                       // "<:01" ranks below ":01"
 }
 
-// Episodes tab: longest Monitored AT/AF episode. Rows read Type, ID#, date, time, duration.
+// Episodes tab rows read Type, ID#, date, time, duration, "A/V" average rates. Longest episode per group:
+// AT/AF, and SVT (SVT, SVT-AF and Fast A&V together) with its ventricular rate.
+var EP_GROUPS = { ahr: /^(AT\/AF|AT|AF)$/i, svt: /^(SVT|SVT-AF|Fast A\s*&\s*V)$/i };
 function parseCarelinkEpisodes(L) {
-  var best = null, n = 0;
+  var out = {};
   for (var i = 1; i + 3 < L.length; i++) {
-    if (!/^#\d+$/.test(L[i]) || !/^(AT\/AF|AT|AF)$/i.test(L[i - 1])) continue;
-    if (!new RegExp("^" + MDATE + "$").test(L[i + 1])) continue;
+    if (!/^#\d+$/.test(L[i]) || !new RegExp("^" + MDATE + "$").test(L[i + 1])) continue;
     var sec = cellSeconds(L[i + 3]);
     if (sec == null) continue;
-    n++;
-    if (best == null || sec > best) best = sec;
+    for (var g in EP_GROUPS) {
+      if (!EP_GROUPS[g].test(L[i - 1])) continue;
+      var r = String(L[i + 4] || "").match(/^(\d+|--)\s*\/\s*(\d+)/);
+      var o = out[g] || (out[g] = { seconds: -1, listed: 0 });
+      o.listed++;
+      if (sec > o.seconds) { o.seconds = sec; o.vrate = r ? +r[2] : null; }
+    }
   }
-  return n ? { longest_seconds: best, listed: n } : null;
+  return Object.keys(out).length ? out : null;
+}
+// "1.5 minutes", plus "at 162 BPM" when the ventricular rate is over 100
+function episodeText(g, withRate) {
+  if (!g) return null;
+  var t = g.seconds < 1 ? "under 1 second" : fmtDur(g.seconds);
+  return t + (withRate && g.vrate > 100 ? " at " + g.vrate + " BPM" : "");
 }
 
 function parseCarelink(text) {
@@ -287,12 +303,12 @@ function parseCarelink(text) {
   for (var i = cs + 1; cs >= 0 && i < (ce > 0 ? ce : L.length) - 1; i++) {
     if (/^Treated$/i.test(L[i])) { block = "treated"; continue; }
     if (/^Monitored$/i.test(L[i])) { block = "monitored"; continue; }
-    if (block && /^\d+$/.test(L[i + 1]) && !/^\d+$/.test(L[i])) counts[block][L[i]] = +L[i + 1];
+    if (block && /^\d{1,3}(,\d{3})*$/.test(L[i + 1]) && !/^[\d,]+$/.test(L[i])) counts[block][L[i]] = +L[i + 1].replace(/,/g, "");
     if (/^Time in AT\/AF$/i.test(L[i])) { var b = pct(L[i + 1]); if (b) { d.atrial_burden_percent = b.v; d.atrial_burden_op = b.op; } }
   }
   var sum = function (o, re) { return Object.keys(o).filter(function (k) { return re.test(k); }).reduce(function (a, k) { return a + o[k]; }, 0); };
   var M = counts.monitored;
-  var vhr = sum(M, /^(VT\b|VT-NS|High Rate-NS|Fast A&V)/i), svt = sum(M, /^SVT\b/i), ahr = sum(M, /^AT\/AF$/i);
+  var vhr = sum(M, /^(VT\b|VT-NS|High Rate-NS)/i), svt = sum(M, /^(SVT\b|Fast A\s*&\s*V)/i), ahr = sum(M, /^AT\/AF$/i);
   var over = sum(M, /Oversensing/i);
   if (vhr) d.episodes.push({ type: "VT", count: vhr, label: "VHR episodes" });
   if (svt) d.episodes.push({ type: "SVT", count: svt, label: "SVT episodes" });
@@ -304,7 +320,7 @@ function parseCarelink(text) {
   var row = function (re) {
     var k = L.findIndex(function (s) { return re.test(s); });
     if (k < 0) return 0;
-    var t = 0; for (var j = k + 1; j <= k + 2 && j < L.length && /^\d+$/.test(L[j]); j++) t += +L[j];
+    var t = 0; for (var j = k + 1; j <= k + 2 && j < L.length && /^\d{1,3}(,\d{3})*$/.test(L[j]); j++) t += +L[j].replace(/,/g, "");
     return t;
   };
   if (d.icd) {
@@ -370,7 +386,10 @@ function parseCarelink(text) {
 
   // Longest AT/AF from the Episodes tab, when that text is here too (pasted together)
   var epi = parseCarelinkEpisodes(L);
-  if (epi) { d.ahr_longest = fmtDur(epi.longest_seconds); d.ahr_longest_listed = epi.listed; }
+  if (epi) {
+    if (epi.ahr) { d.ahr_longest = episodeText(epi.ahr, false); d.ahr_longest_listed = epi.ahr.listed; }
+    if (epi.svt) { d.svt_longest = episodeText(epi.svt, true); d.svt_longest_listed = epi.svt.listed; }
+  }
   d.episodes_page = /Arrhythmia Episodes with EGM/i.test(J) && !/Remaining Longevity/i.test(J);
   d.recognised = d.leads.length > 0 || d.battery.years != null;
   return d;
@@ -449,7 +468,9 @@ function template(d, flags, T) {
   var vhr = by(["VT", "VF", "NSVT"]);              // VT, VF and nonsustained V together
   if (vhr) ep.push(row(vhr, "VHR", "vhr"));
   var svt = by(["SVT"]);
-  if (svt) ep.push(row(svt, "SVT", "svt"));
+  if (svt && d.source === "CareLink") ep.push("<span>" + svt + " SVT " + (svt === 1 ? "episode" : "episodes") + " noted, longest episode is " +
+    (d.svt_longest ? val(d.svt_longest) : inp("svt-longest", "duration", "w-mid")) + ", " + inp("det-svt", "details from the EGM") + "</span>");
+  else if (svt) ep.push(row(svt, "SVT", "svt"));
   var ahr = by(["AHR"]);
   if (ahr) ep.push(ahr + " AHR " + (ahr === 1 ? "episode" : "episodes") + " noted, longest episode lasting " + (d.ahr_longest ? val(d.ahr_longest) : inp("ahr-longest", "duration", "w-mid")));
   if (d.therapies_delivered && d.source !== "CareLink") ep.push('<span class="nw">' + pl(d.therapies_delivered, "therapy", "therapies") + " delivered, " + inp("det-therapy", "details from the EGM") + "</span>");
@@ -621,9 +642,9 @@ function pageText(doc) {
 // Saved Episodes-tab result, kept only for the same device and interrogation date
 var EP_KEY = "pmr.carelink.episodes";
 function epKey(d) { return (d.device.serial || "") + "|" + (d.interrogated || ""); }
-function saveEpisodes(d) { try { localStorage.setItem(EP_KEY, JSON.stringify({ k: epKey(d), longest: d.ahr_longest, t: Date.now() })); } catch (e) {} }
+function saveEpisodes(d) { try { localStorage.setItem(EP_KEY, JSON.stringify({ k: epKey(d), ahr: d.ahr_longest, svt: d.svt_longest, t: Date.now() })); } catch (e) {} }
 function savedEpisodes(d) {
-  try { var v = JSON.parse(localStorage.getItem(EP_KEY) || "null"); return v && v.k === epKey(d) && Date.now() - v.t < 12 * 3600e3 ? v.longest : null; } catch (e) { return null; }
+  try { var v = JSON.parse(localStorage.getItem(EP_KEY) || "null"); return v && v.k === epKey(d) && Date.now() - v.t < 12 * 3600e3 ? v : null; } catch (e) { return null; }
 }
 
 // Load the Episodes tab in an invisible same-site frame and read its text (the frame must be laid out for innerText)
@@ -654,28 +675,47 @@ function openOverlay(T) {
   var pg = pageText(document), d = parse(pg.text);
   var box = document.createElement("div");
   box.id = "pmremote-overlay";
-  box.style.cssText = "position:fixed;top:12px;left:12px;width:min(600px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:2147483647;box-shadow:0 8px 30px rgba(0,0,0,.25);border-radius:8px";
-  document.body.appendChild(box);
+  var side = d.source === "CareLink" ? "right" : "left";
+  box.style.cssText = "position:fixed;top:12px;" + side + ":12px;width:min(600px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:2147483647;box-shadow:0 8px 30px rgba(0,0,0,.25);border-radius:8px";
+  document.documentElement.appendChild(box);
+  // Some sites zoom the whole page; undo it so the panel is the same size everywhere
+  var probe = document.createElement("div");
+  probe.style.cssText = "position:fixed;left:0;top:0;width:100px;height:1px;visibility:hidden";
+  box.appendChild(probe);
+  var zoom = probe.getBoundingClientRect().width / 100;
+  probe.remove();
+  if (zoom && Math.abs(zoom - 1) > 0.02) box.style.zoom = String(1 / zoom);
   var host = box.attachShadow ? box.attachShadow({ mode: "open" }) : box;
   var close = function () { box.remove(); };
   if (d.source === "CareLink" && d.episodes_page) {
     // Clicked on the Episodes tab: remember the longest AT/AF for this transmission
-    if (d.ahr_longest) saveEpisodes(d);
+    if (d.ahr_longest || d.svt_longest) saveEpisodes(d);
+    var msgs = [];
+    if (d.ahr_longest) msgs.push("Longest AT/AF episode: " + esc(d.ahr_longest) + " (of " + d.ahr_longest_listed + " listed).");
+    if (d.svt_longest) msgs.push("Longest SVT / Fast A&amp;V episode: " + esc(d.svt_longest) + " (of " + d.svt_longest_listed + " listed).");
     host.innerHTML = "<style>" + CSS + '</style><div class="pmr"><div class="card"><div class="top"><div class="dev">Episodes</div><button class="x" data-a="close" aria-label="Close">×</button></div>' +
-      '<div class="verdict ' + (d.ahr_longest ? "v-ok" : "v-warn") + '">' + (d.ahr_longest ? "Longest AT/AF episode: " + esc(d.ahr_longest) + " (of " + d.ahr_longest_listed + " listed). Saved: open Current Status and click PM Remote."
-        : "No AT/AF episodes found on this page.") + "</div></div></div>";
+      '<div class="verdict ' + (msgs.length ? "v-ok" : "v-warn") + '">' + (msgs.length ? msgs.join("<br>") + "<br>Saved: return to Quick Look II and press PM Remote again."
+        : "No AT/AF or SVT episodes found on this page.") + "</div></div></div>";
     host.querySelector('[data-a="close"]').onclick = close;
     return;
   }
-  if (d.source === "CareLink" && !d.ahr_longest) d.ahr_longest = savedEpisodes(d);
+  if (d.source === "CareLink") {
+    var sv = savedEpisodes(d);
+    if (sv) { d.ahr_longest = d.ahr_longest || sv.ahr; d.svt_longest = d.svt_longest || sv.svt; }
+  }
   render(host, d, T, { onClose: close });
-  var slot = host.querySelector('[data-k="ahr-longest"]');
-  if (d.source === "CareLink" && slot) {
-    slot.placeholder = "reading Episodes…";
+  var slots = { ahr: host.querySelector('[data-k="ahr-longest"]'), svt: host.querySelector('[data-k="svt-longest"]') };
+  if (d.source === "CareLink" && (slots.ahr || slots.svt)) {
+    for (var g in slots) if (slots[g]) slots[g].placeholder = "reading Episodes…";
     loadEpisodes(pg.doc, function (t) {
       var e = t ? parseCarelinkEpisodes(lines(t)) : null;
-      if (e && slot.isConnected && !slot.value) { slot.value = fmtDur(e.longest_seconds); slot.classList.add("prefilled"); }
-      else if (slot.isConnected && !slot.value) slot.placeholder = "duration (open Episodes, click PM Remote)";
+      for (var g in slots) {
+        var sl = slots[g];
+        if (!sl || !sl.isConnected || sl.value) continue;
+        var v = e && e[g] ? episodeText(e[g], g === "svt") : null;
+        if (v) { sl.value = v; sl.classList.add("prefilled"); sl.style.width = Math.max(8.5, v.length * 0.66 + 1) + "em"; }
+        else sl.placeholder = "open Episodes, press PM Remote";
+      }
     });
   }
 }

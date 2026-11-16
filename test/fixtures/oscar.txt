@@ -1,0 +1,202 @@
+CareLink Network
+Clinic:
+CDN - JPOC
+Search patients
+Active Transmissions
+Reports List
+Export Status
+Summary Reports
+Advanced Search
+Transmission Schedule
+TESTPATIENT, NOVEMBER
+01-Jan-1940
+Viewed
+Current Status
+Current Report
+Quick Look II
+Current EGM
+Episodes
+More Reports
+Comments and Notes
+History
+Device: Azure™ S DR MRI W3DR01
+Serial Number: TST900091S
+Date of Interrogation: 28-Sep-2026 23:55:45
+Arrhythmia
+List
+Arrhythmia Episodes with EGM since: 01-Jul-2026
+Non-sustained VT
+Episodes: 15
+With EGM: 8
+Time
+Duration
+Avg bpm A/V
+Full EGM
+Type
+ID#
+Date
+hh:mm
+hh:mm:ss
+View
+Print
+VT-NS
+#19202
+28-Sep-2026
+20:50
+:01
+188/194
+Report chart.
+VT-NS
+#19191
+27-Sep-2026
+14:18
+<:01
+154/176
+Report chart.
+VT-NS
+#18823
+18-Sep-2026
+13:36
+:02
+119/167
+Report chart.
+SVT
+Episodes: 25
+With EGM: 4
+Time
+Duration
+Avg bpm A/V
+Full EGM
+Type
+ID#
+Date
+hh:mm
+hh:mm:ss
+View
+Print
+SVT-AF
+#19235
+28-Sep-2026
+23:25
+:01:19
+333/162
+Report chart.
+SVT-AF
+#19232
+28-Sep-2026
+23:23
+:01:05
+316/162
+Report chart.
+SVT-AF
+#19194
+28-Sep-2026
+12:18
+:01:11
+333/176
+Report chart.
+SVT-AF
+#19034
+20-Sep-2026
+10:17
+:05
+333/231
+Report chart.
+Monitored AT/AF
+Episodes: 51
+With EGM: 6
+Time
+Duration
+Avg bpm A/V
+Full EGM
+Type
+ID#
+Date
+hh:mm
+hh:mm:ss
+View
+Print
+AT/AF
+#19249
+28-Sep-2026
+23:42
+:18
+83/92
+Report chart.
+AT/AF
+#19248
+28-Sep-2026
+23:38
+:50
+245/128
+Report chart.
+AT/AF
+#19247
+28-Sep-2026
+23:37
+:34
+238/122
+Report chart.
+AT/AF
+#19246
+28-Sep-2026
+23:37
+:20
+153/100
+Report chart.
+AT/AF
+#19245
+28-Sep-2026
+23:35
+:48
+176/106
+Report chart.
+AT/AF
+#19244
+28-Sep-2026
+23:34
+:54
+267/124
+Report chart.
+Fast A & V
+Episodes: 7
+With EGM: 4
+Time
+Duration
+Avg bpm A/V
+Full EGM
+Type
+ID#
+Date
+hh:mm
+hh:mm:ss
+View
+Print
+Fast A&V
+#19196
+28-Sep-2026
+16:04
+:20
+178/141
+Report chart.
+Fast A&V
+#19195
+28-Sep-2026
+15:46
+:09
+179/147
+Report chart.
+Fast A&V
+#18455
+08-Sep-2026
+21:14
+:51
+284/156
+Report chart.
+Fast A&V
+#18447
+08-Sep-2026
+21:10
+:11
+259/151
+Report chart.

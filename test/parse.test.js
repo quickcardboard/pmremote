@@ -114,6 +114,12 @@ eq([both.episodes_page, both.ahr_longest, both.leads.length], [false, "24.5 hour
 eq([P.cellSeconds(":01"), P.cellSeconds(":01:21"), P.cellSeconds("24:17:18"), P.cellSeconds("10-Oct-2026")], [1, 81, 87438, null], "Episodes duration cells");
 eq(P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "alpha.txt"), "utf8")).source, "LATITUDE", "LATITUDE still detected");
 
+const nv = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "november.txt"), "utf8"));
+eq(nv.episodes.map((e) => [e.type, e.count]), [["VT", 43], ["SVT", 89], ["AHR", 3532]], "'3,532' read; Fast A&V counted on the SVT line");
+const os = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "oscar.txt"), "utf8"));
+eq([os.ahr_longest, os.ahr_longest_listed, os.svt_longest, os.svt_longest_listed], ["54 seconds", 6, "1.5 minutes at 162 BPM", 8], "longest AT/AF; longest of SVT, SVT-AF and Fast A&V with V rate");
+eq(P.cellSeconds("<:01"), 0.5, "'<:01' is under a second");
+
 // Alerts come from the daily value; N/R daily = no alert; low sensing within 20% of in-office = no alert
 const lead = (daily, office) => ({ chamber: "RV", daily: { amp: daily }, office: { amp: office } });
 const sense = (dl, of) => {
