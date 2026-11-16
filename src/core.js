@@ -39,11 +39,18 @@ function parseLatitude(text) {
     d.device.model = (sm ? sm[1] : dev).trim();
     d.device.serial = sm ? sm[2] : null;
   }
-  var tags = grab(/Search Tags:\s*([^\n]+)/i);
-  if (tags) { tags = tags.replace(/Monitoring Status.*$/i, "").trim(); d.tags = tags.split(/\s+/); }
+  var ti = L.findIndex(function (s) { return /^Search Tags:/i.test(s); });
+  if (ti >= 0) {
+    var tags = L[ti].replace(/^Search Tags:\s*/i, "").replace(/Monitoring Status.*$/i, "").trim();
+    // a long tag list can wrap: take a following all-capitals line that holds a clinic code
+    for (var tw = ti + 1; tw <= ti + 2 && tw < L.length; tw++)
+      if (/^[A-Z0-9 ]+$/.test(L[tw]) && SITES.some(function (c) { return L[tw].split(" ").indexOf(c) >= 0; })) tags += " " + L[tw];
+    d.tags = tags.split(/\s+/).filter(Boolean);
+  }
   d.site = SITES.filter(function (s) { return d.tags.indexOf(s) >= 0; })[0] || null;
   d.advisory = d.tags.indexOf("ADVISORY") >= 0;
   d.measured = grab(new RegExp("Most Recent\\s+Daily\\s+Measurement\\s*\\(?(" + DATE + ")", "i"));
+  d.office_date = grab(new RegExp("Most Recent\\s+In-?\\s*Office\\s+Measurement\\s*\\(?(" + DATE + ")", "i"));
   d.since_reset = grab(new RegExp("Since Last Reset\\s+(" + DATE + ")", "i"));
   d.device.mode = grab(/(?:^|\n)Mode\s+([A-Z]{3,5})(?=\n|$)/);
 
@@ -76,21 +83,21 @@ function parseLatitude(text) {
     if (!leads[key]) { leads[key] = { chamber: key }; order.push(key); }
     var ld = leads[key];
     var clean = buf.replace(new RegExp("\\(\\s*" + DATE + "\\s*\\)", "g"), " ");
-    var m, v = [];
-    if (lab[1] === "amp") {
-      var re = /([<>]?)\s*(\d+(?:\.\d+)?)\s*mV/g;
-      while ((m = re.exec(clean))) v.push({ v: +m[2], op: m[1] });
-      if (v.length) { ld.amplitude_mv = v[v.length - 1].v; ld.amplitude_op = v[v.length - 1].op; }
-    } else if (lab[1] === "imp" || lab[1] === "shock") {
-      var re2 = /([<>]?)\s*(\d+(?:\.\d+)?)\s*(?:Ω|ohms?\b)/gi;
-      while ((m = re2.exec(clean))) v.push(+m[2]);
-      if (v.length) { ld.impedance_ohm = v[v.length - 1]; if (v.length > 1) ld.previous_impedance_ohm = v[0]; }
-    } else if (lab[1] === "thr") {
-      var re3 = /(Auto\s*)?(\d+(?:\.\d+)?)\s*V\s*@\s*(\d+(?:\.\d+)?)\s*ms/gi;
-      while ((m = re3.exec(clean))) v.push(m);
-      if (v.length) { var t = v[v.length - 1]; ld.threshold_v = +t[2]; ld.threshold_pw_ms = +t[3]; if (v.length > 1) ld.previous_threshold_v = +v[0][2]; }
-    }
+    // Columns are [in-office, daily]; read each cell in order, N/R included, so a blank daily never
+    // passes the in-office value off as current.
+    var kind = lab[1] === "shock" ? "imp" : lab[1];
+    var cells = readCells(clean, kind);
+    ld.office = ld.office || {}; ld.daily = ld.daily || {};
+    if (cells.length >= 2) { ld.office[kind] = cells[0]; ld.daily[kind] = cells[1]; }
+    else if (cells.length === 1) ld.daily[kind] = cells[0];
   }
+  Object.keys(leads).forEach(function (c) {
+    var l = leads[c], cur = function (k) { return l.daily[k] || l.office[k] || null; };
+    var am = cur("amp"), im = cur("imp"), th = cur("thr");
+    if (am) { l.amplitude_mv = am.v; l.amplitude_op = am.op; }
+    if (im) { l.impedance_ohm = im.v; if (l.daily.imp && l.office.imp) l.previous_impedance_ohm = l.office.imp.v; }
+    if (th) { l.threshold_v = th.v; l.threshold_pw_ms = th.pw; if (l.daily.thr && l.office.thr) l.previous_threshold_v = l.office.thr.v; }
+  });
   d.leads = order.map(function (c) { return leads[c]; });
 
   // Battery
@@ -126,7 +133,7 @@ function parseLatitude(text) {
   // Longest AHR: LATITUDE's Summary shows only the total time in AT/AF since reset, which equals the
   // longest episode when there was exactly one.
   var ov = J.search(/AT\/AF Overview/i);
-  var tt = (ov >= 0 ? J.slice(ov, ov + 600) : "").match(/Total Time in AT\/AF(?:\s*\(([^)]*)\))?\s+([^\n]+)/i);
+  var tt = (ov >= 0 ? J.slice(ov, ov + 600) : "").match(/Total Time in AT\/AF(?:\s*\(([^)]*)\))?(?:\s*\([^)]*\))*\s+([^\n]+)/i);
   d.atrial_total_seconds = tt ? durSeconds(tt[2], tt[1]) : null;
   var ahrN = (d.episodes.filter(function (e) { return e.type === "AHR"; })[0] || {}).count;
   d.ahr_longest = ahrN === 1 && d.atrial_total_seconds ? fmtDur(d.atrial_total_seconds) : null;
@@ -176,6 +183,21 @@ function fmtDur(sec) {
   var m = Math.round(sec / 60);
   if (m < 60) return pl(m, "minute");
   return pl(Math.round(sec / 3600), "hour");
+}
+
+// One measurement row -> cells in column order. Each cell is null (N/R) or {v, op, pw, auto}.
+var OHM = "[\u03A9\u2126]";
+function readCells(text, kind) {
+  var re = kind === "amp" ? /N\/R|([<>]?)\s*(\d+(?:\.\d+)?)\s*mV/gi
+    : kind === "imp" ? new RegExp("N\\/R|([<>]?)\\s*(\\d+(?:\\.\\d+)?)(?:\\s*(?:" + OHM + "|ohms?\\b))?", "gi")
+    : /N\/R|(Auto\s*)?(\d+(?:\.\d+)?)\s*V\s*@\s*(\d+(?:\.\d+)?)\s*ms/gi;
+  var out = [], m;
+  while ((m = re.exec(text))) {
+    if (/^N\/R$/i.test(m[0])) { out.push(null); continue; }
+    if (kind === "thr") out.push({ v: +m[2], pw: +m[3], auto: !!m[1] });
+    else out.push({ v: +m[2], op: m[1] || "" });
+  }
+  return out;
 }
 
 /* ---------------- Rules ---------------- */
@@ -240,13 +262,13 @@ function template(d, flags, T) {
       .map(function (r) { return '<option value="' + r + '">' + r + "</option>"; }).join("") + "</select>")];
   var ep = [];
   [["VHR", ["VT", "VF"]], ["NS-VT", ["NSVT"]], ["SVT", ["SVT"]]].forEach(function (x) {
-    var n = by(x[1]); if (n) ep.push(pl(n, "episode") + " of " + x[0] + " noted, " + inp("det-" + x[0], "details from the EGM"));
+    var n = by(x[1]); if (n) ep.push('<span class="nw">' + pl(n, "episode") + " of " + x[0] + " noted, " + inp("det-" + x[0], "details from the EGM") + "</span>");
   });
   var ahr = by(["AHR"]);
   if (ahr) ep.push(pl(ahr, "episode") + " of AHR noted, longest episode lasting " + val(d.ahr_longest, "ahr-longest", "duration"));
-  if (d.therapies_delivered) ep.push(pl(d.therapies_delivered, "therapy", "therapies") + " delivered, " + inp("det-therapy", "details from the EGM"));
+  if (d.therapies_delivered) ep.push('<span class="nw">' + pl(d.therapies_delivered, "therapy", "therapies") + " delivered, " + inp("det-therapy", "details from the EGM") + "</span>");
   var af48 = by(["AF48"]);
-  if (af48) ep.push(pl(af48, "atrial episode") + " longer than 48 hours noted, " + inp("det-af48", "details from the EGM"));
+  if (af48) ep.push('<span class="nw">' + pl(af48, "atrial episode") + " longer than 48 hours noted, " + inp("det-af48", "details from the EGM") + "</span>");
   out = out.concat(ep.length ? ep : ["No high rate episodes were noted."]);
   out.push("Atrial burden: " + val(d.atrial_burden_percent != null ? (d.atrial_burden_op || "") + d.atrial_burden_percent : null, "burden", "%") + "%");
   var line = function (tag) { return flags.filter(function (f) { return f.tag === tag && f.level !== "info"; }).map(function (f) { return f.title; }).join("; "); };
@@ -263,31 +285,31 @@ function template(d, flags, T) {
 
 /* ---------------- Panel ---------------- */
 var CSS = [
-  ":host,.pmr{all:initial;font:14px/1.45 system-ui,-apple-system,'Segoe UI',sans-serif;color:#17232b}",
+  ":host,.pmr{all:initial;font:16px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;color:#17232b}",
   ".pmr *{box-sizing:border-box}",
   ".pmr .card{background:#fff;border:1px solid #d6dee2;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:12px}",
   ".pmr .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}",
-  ".pmr .dev{font-weight:600;font-size:15px}.pmr .sub{color:#5a6b75;font-size:12px}",
-  ".pmr .x{border:0;background:none;font-size:20px;cursor:pointer;color:#5a6b75;line-height:1}",
+  ".pmr .dev{font-weight:600;font-size:18px}.pmr .sub{color:#5a6b75;font-size:14px}",
+  ".pmr .x{border:0;background:none;font-size:26px;cursor:pointer;color:#5a6b75;line-height:1}",
   ".pmr .verdict{font-weight:600;padding:8px 10px;border-radius:6px}",
   ".pmr .v-crit{background:#fbe9ea;color:#b4232c}.pmr .v-warn{background:#fdf1dc;color:#8a5200}.pmr .v-ok{background:#e4f4ea;color:#1f7a4a}",
   ".pmr ul{list-style:none;margin:0;padding:0}.pmr li{display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid #eef1f3}",
-  ".pmr li:last-child{border-bottom:0}.pmr .rule{display:block;color:#5a6b75;font-size:11px}",
-  ".pmr .pill{flex:none;width:62px;text-align:center;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 0;border-radius:99px}",
+  ".pmr li:last-child{border-bottom:0}.pmr .rule{display:block;color:#5a6b75;font-size:13px}",
+  ".pmr .pill{flex:none;width:72px;text-align:center;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 0;border-radius:99px}",
   ".pmr .critical{background:#fbe9ea;color:#b4232c}.pmr .warn{background:#fdf1dc;color:#8a5200}.pmr .info{background:#eceff1;color:#4a5a66}",
   ".pmr .text-block{line-height:2;padding:10px 12px;border:1px solid #d6dee2;border-radius:6px;background:#f6f8f9;outline:none}",
-  ".pmr .report-select{font:inherit;font-size:13px;background:#fffdf3;border:1px solid #c9b98a;border-radius:4px;padding:1px 3px;max-width:100%;color:#17232b}",
+  ".pmr .report-select{font:inherit;font-size:15px;background:#fffdf3;border:1px solid #c9b98a;border-radius:4px;padding:1px 3px;max-width:100%;color:#17232b}",
   ".pmr .report-select.needs{border-color:#b4232c;box-shadow:0 0 0 2px #fbe9ea}",
-  ".pmr .fill-input{font:13px ui-monospace,Menlo,Consolas,monospace;background:#fffdf3;border:1px solid #c9b98a;border-radius:4px;padding:1px 5px;color:#17232b}",
-  ".pmr .w-short{width:5.5em}.pmr .w-long{width:min(18em,100%)}",
+  ".pmr .fill-input{font:15px ui-monospace,Menlo,Consolas,monospace;background:#fffdf3;border:1px solid #c9b98a;border-radius:4px;padding:1px 5px;color:#17232b}",
+  ".pmr .w-short{width:5.5em}.pmr .w-long{width:13em;max-width:100%}.pmr .nw{white-space:nowrap}",
   ".pmr .prefilled{box-shadow:inset 0 -2px 0 #0f5e7a}.pmr .flagged{color:#b4232c;font-weight:600}",
   ".pmr .btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}",
-  ".pmr button.b{font:inherit;font-size:13px;padding:6px 12px;border-radius:6px;border:1px solid #d6dee2;background:#fff;cursor:pointer;color:#17232b}",
+  ".pmr button.b{font:inherit;font-size:15px;padding:7px 14px;border-radius:6px;border:1px solid #d6dee2;background:#fff;cursor:pointer;color:#17232b}",
   ".pmr button.b.p{background:#0f5e7a;border-color:#0f5e7a;color:#fff;font-weight:600}",
   ".pmr button.b:focus-visible,.pmr select:focus-visible,.pmr input:focus-visible{outline:2px solid #0f5e7a;outline-offset:2px}",
-  ".pmr .msg{font-size:12px;color:#1f7a4a}.pmr .msg.err{color:#b4232c}",
-  ".pmr table{border-collapse:collapse;font-size:12px;width:100%}.pmr td,.pmr th{padding:3px 6px;border-bottom:1px solid #eef1f3;text-align:left}",
-  ".pmr th{color:#5a6b75;font-weight:500}.pmr td.n{font-family:ui-monospace,Menlo,Consolas,monospace}",
+  ".pmr .msg{font-size:14px;color:#1f7a4a}.pmr .msg.err{color:#b4232c}",
+  ".pmr .tw{overflow-x:auto}.pmr table{border-collapse:collapse;font-size:15px;width:100%}.pmr td,.pmr th{padding:4px 6px;border-bottom:1px solid #eef1f3;text-align:left;white-space:nowrap}",
+  ".pmr th{color:#5a6b75;font-weight:500}.pmr tr.hd th{font-size:12px}.pmr .cur{color:#0b5fa5;font-weight:700}.pmr .old{color:#7a8a94;font-weight:400}",
   ".pmr textarea{position:absolute;left:-9999px}"
 ].join("\n");
 
@@ -301,10 +323,17 @@ function render(host, d, T, opt) {
   var vcls = crit ? "v-crit" : warn ? "v-warn" : "v-ok";
   var vtxt = !d.recognised ? "This doesn't look like a LATITUDE Summary page." : crit ? crit + " critical, " + warn + " to review" : warn ? warn + " to review" : "Nothing out of range";
   if (!d.recognised) vcls = "v-warn";
+  var cell = function (c, kind) {
+    if (c === undefined) return "";
+    if (c === null) return "N/R";
+    return kind === "amp" ? c.op + c.v + " mV" : kind === "imp" ? c.op + c.v + " Ω" : (c.auto ? "Auto " : "") + c.v + " V @ " + c.pw + " ms";
+  };
   var leadRows = (d.leads || []).map(function (l) {
-    return "<tr><td>" + l.chamber + '</td><td class="n">' + (l.amplitude_mv != null ? (l.amplitude_op || "") + l.amplitude_mv + " mV" : "—") +
-      '</td><td class="n">' + (l.impedance_ohm != null ? l.impedance_ohm + " Ω" : "—") + (l.previous_impedance_ohm ? " (" + l.previous_impedance_ohm + ")" : "") +
-      '</td><td class="n">' + (l.threshold_v != null ? l.threshold_v + " V @ " + l.threshold_pw_ms + " ms" : "—") + "</td></tr>";
+    var row = "<tr><th>" + l.chamber + "</th>";
+    ["amp", "imp", "thr"].forEach(function (k) {
+      row += '<td><b class="cur">' + esc(cell(l.daily[k], k) || "—") + '</b></td><td class="old">' + esc(cell(l.office[k], k) || "—") + "</td>";
+    });
+    return row + "</tr>";
   }).join("");
   host.innerHTML = '<style>' + CSS + '</style><div class="pmr"><div class="card">' +
     '<div class="top"><div><div class="dev">' + esc(d.device.model || "Unknown device") + (d.device.mode ? " · " + esc(d.device.mode) : "") + '</div>' +
@@ -319,7 +348,9 @@ function render(host, d, T, opt) {
     (d.patient.name ? '<button class="b" data-a="name">Copy name</button>' : "") +
     (d.device.serial ? '<button class="b" data-a="serial">Copy serial</button>' : "") +
     '<span class="msg" data-k="msg"></span></div>' +
-    (leadRows ? '<table><tr><th>Lead</th><th>Sensing</th><th>Impedance (in-office)</th><th>Threshold</th></tr>' + leadRows + "</table>" : "") +
+    (leadRows ? '<div class="tw"><table><tr><th></th><th colspan="2">Sensing</th><th colspan="2">Impedance</th><th colspan="2">Threshold</th></tr>' +
+      '<tr class="hd"><th></th>' + '<th class="cur">Daily</th><th class="old">In-office</th>'.repeat(3) + "</tr>" + leadRows + "</table></div>" +
+      '<div class="sub"><b class="cur">Daily</b> ' + esc(d.measured || "") + ' (current) · <span class="old">In-office ' + esc(d.office_date || "") + "</span></div>" : "") +
     '<div class="sub">Pacing A ' + (d.pacing_percent.atrial != null ? d.pacing_percent.atrial + "%" : "—") + " · V " + (d.pacing_percent.ventricular != null ? d.pacing_percent.ventricular + "%" : "—") +
     (d.since_reset ? " · counters since " + esc(d.since_reset) : "") + "</div>" +
     "</div></div>";
@@ -384,7 +415,7 @@ function openOverlay(T) {
   var d = parseLatitude(pageText(document));
   var box = document.createElement("div");
   box.id = "pmremote-overlay";
-  box.style.cssText = "position:fixed;top:12px;right:12px;width:min(460px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:2147483647;box-shadow:0 8px 30px rgba(0,0,0,.25);border-radius:8px";
+  box.style.cssText = "position:fixed;top:12px;left:12px;width:min(600px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;z-index:2147483647;box-shadow:0 8px 30px rgba(0,0,0,.25);border-radius:8px";
   document.body.appendChild(box);
   var host = box.attachShadow ? box.attachShadow({ mode: "open" }) : box;
   render(host, d, T, { onClose: function () { box.remove(); } });

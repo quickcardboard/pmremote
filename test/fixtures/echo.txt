@@ -1,0 +1,43 @@
+Device: L331 ACCOLADE MRI	Clinic (Primary)
+EL/900021	Search Tags: ACCOLADE ADVISORY
+JPOCSC
+Date of Birth: 05 May 1955	Monitoring Status: Monitored
+My Alerts
+15 Nov 2026 12:10	VT Episode occurred (V>A).
+For Technical Support contact 1-800-CARDIAC (Americas) or your local Boston Scientific Representative.
+Leads (View detail)
+	Most Recent In-Office Measurement (21 Sep 2026)	Most Recent Daily Measurement (15 Nov 2026)
+Atrial
+Intrinsic Amplitude	0.4 mV	0.8 mV
+Pace Impedance	750 Ω	763 Ω
+Pace Threshold	1.0 V @ 0.4 ms	N/R
+(03 Mar 2026)
+Ventricular
+Intrinsic Amplitude	12.1 mV	7.3 mV
+Pace Impedance	658 Ω	677 Ω
+Pace Threshold	0.7 V @ 0.4 ms	0.7 V @ 0.4 ms
+Battery
+Approximate time to explant: 9 years from 16 Nov 2026
+AT/AF Overview (Generate report)
+	Since Last Reset
+21 Sep 2026
+Atrial Arrhythmia
+AT/AF (One Year of Data)	98 %
+AT/AF Events	9053
+Total Time in AT/AF (days) (One Year of Data)	52.7
+Most Recent (16 Nov 2026 01:15)
+Avg V Rate, Duration (hh:mm:ss)	84 min-1, 00:27:54
+Longest (27 Oct 2026 07:32)
+Avg V Rate, Duration (hh:mm:ss)	109 min-1, 06:41:40
+Fastest VS Rate (06 Nov 2026 10:54)
+Max V Rate, Duration (hh:mm:ss)	235 min-1, 03:14:55
+Event Counts
+VT Episodes (V>A)	23
+SVT Episodes (V<=A)	142
+NonsustainedV Episodes	1764
+Atrial Episodes > 48 hr	0
+Percent Paced
+Atrial	1 %
+Ventricular	37 %
+Settings
+Mode	DDD
