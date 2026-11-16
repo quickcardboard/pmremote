@@ -270,7 +270,11 @@ function template(d, flags, T) {
   var af48 = by(["AF48"]);
   if (af48) ep.push('<span class="nw">' + pl(af48, "atrial episode") + " longer than 48 hours noted, " + inp("det-af48", "details from the EGM") + "</span>");
   out = out.concat(ep.length ? ep : ["No high rate episodes were noted."]);
-  out.push("Atrial burden: " + val(d.atrial_burden_percent != null ? (d.atrial_burden_op || "") + d.atrial_burden_percent : null, "burden", "%") + "%");
+  // Burden N/R: DDIR says so on the line; VVI(R) has no atrial lead, so the line is left out.
+  var mode = d.device.mode || "";
+  if (d.atrial_burden_percent != null) out.push("Atrial burden: " + val((d.atrial_burden_op || "") + d.atrial_burden_percent) + "%");
+  else if (mode === "DDIR") out.push("Atrial burden: DDIR");
+  else if (!/^VVIR?$/.test(mode)) out.push("Atrial burden: " + val(null, "burden", "%") + "%");
   var line = function (tag) { return flags.filter(function (f) { return f.tag === tag && f.level !== "info"; }).map(function (f) { return f.title; }).join("; "); };
   var imp = line("imp"), sen = line("sense");
   out.push(imp ? '<span class="flagged">Lead impedance: ' + esc(imp) + "</span>" : "Lead impedance stable");
