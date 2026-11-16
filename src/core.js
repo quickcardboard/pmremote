@@ -740,7 +740,9 @@ function reportText(rootEl) {
     if (n.tagName === "INPUT") { out += n.value; return; }
     for (var c = n.firstChild; c; c = c.nextSibling) walk(c);
   })(rootEl);
-  return out.split("\n").map(function (l) { return l.replace(/ {2,}/g, " ").trim(); }).filter(Boolean).join("\n");
+  // every line is a sentence: end it with a period (not after a colon, e.g. an empty "Meditech last ordered:")
+  return out.split("\n").map(function (l) { return l.replace(/ {2,}/g, " ").trim(); }).filter(Boolean)
+    .map(function (l) { return /[.!?:]$/.test(l) ? l : l + "."; }).join("\n");
 }
 
 /* ---------------- Bookmarklet entry ---------------- */
