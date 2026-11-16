@@ -90,11 +90,6 @@ details summary { cursor: pointer; font-weight: 600 }
       i.onchange = function () { var v = parseFloat(i.value); if (isFinite(v)) { T[x[0]] = v; save(); bookmarklet(); show(); } };
       h.append(l, i);
     });
-    var l = document.createElement("label"); l.textContent = "Default appointment site (when no site tag)"; l.htmlFor = "t-site";
-    var s = document.createElement("select"); s.id = "t-site";
-    P.SITES.forEach(function (x) { s.add(new Option(x, x)); }); s.value = T.site;
-    s.onchange = function () { T.site = s.value; save(); bookmarklet(); show(); };
-    h.append(l, s);
   }
   $("reset").onclick = function () { T = Object.assign({}, P.DEFAULTS); save(); settings(); bookmarklet(); show(); };
 

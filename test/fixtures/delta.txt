@@ -1,0 +1,41 @@
+Device: L311 ACCOLADE	Clinic (Primary)
+MRI/900011	Search Tags: None
+Date of Birth: 04 Apr 1951	Monitoring Status: Monitored
+Leads (View detail)
+	Most Recent In-Office Measurement (08 Sep 2026)	Most Recent Daily Measurement (14 Nov 2026)
+Atrial
+Intrinsic Amplitude	2.4 mV	1.7 mV
+Pace Impedance	701 Ω	655 Ω
+Pace Threshold	0.6 V @ 0.4 ms	0.7 V @ 0.4 ms
+Ventricular
+Intrinsic Amplitude	7.3 mV	7.1 mV
+Pace Impedance	752 Ω	723 Ω
+Pace Threshold	Auto 0.9 V @
+0.4 ms	1.0 V @ 0.4 ms
+Battery
+Approximate time to explant: 7 years from 15 Nov 2026
+AT/AF Overview (Generate report)
+	Since Last Reset
+08 Sep 2026
+Atrial Arrhythmia
+AT/AF	<1 %
+AT/AF Events	2
+Total Time in AT/AF (hr)	<0.1
+Most Recent (07 Nov 2026 16:55)
+Avg V Rate, Duration (hh:mm:ss)	69 min-1, 00:00:07
+Longest (07 Nov 2026 16:55)
+Avg V Rate, Duration (hh:mm:ss)	69 min-1, 00:00:07
+Fastest VS Rate (07 Nov 2026 16:55)
+Max V Rate, Duration (hh:mm:ss)	N/R, 00:00:07
+Health (View detail)
+Total Time in AT/AF	0.0 hour(s)
+Event Counts
+VT Episodes (V>A)	0
+SVT Episodes (V<=A)	0
+NonsustainedV Episodes	0
+Atrial Episodes > 48 hr	0
+Percent Paced
+Atrial	25 %
+Ventricular	100 %
+Settings
+Mode	DDDR

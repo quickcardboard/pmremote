@@ -16,7 +16,7 @@ Thresholds and the default appointment site are set on the page and built into t
 
 ## What is read (LATITUDE Summary)
 
-Patient name, device model and serial, search tags (appointment site from the tag; ADVISORY noted), My Alerts
+Patient name, device model and serial, search tags (clinic from the tag: LMH, JPOCSC, SMH, ERH, DH, PAH, RMH, ARH; flagged when none; ADVISORY noted), My Alerts
 (sets the transmission reason), per-chamber intrinsic amplitude, pace impedance (latest and in-office), pace
 threshold, battery time to explant, AT/AF %, AT/AF events, VT/SVT/NSVT/atrial > 48 h counts, percent paced,
 mode, and device messages such as "disabled by the Signal Artifact Monitor".
@@ -36,8 +36,8 @@ mode, and device messages such as "disabled by the Signal Artifact Monitor".
 
 The report is plain editable text; only the action line is a drop-down (default "No actions taken").
 Each arrhythmia type gets its own line with its count and a details box for the EGM read. AHR shows the
-count and the longest episode, rounded to the nearest hour, minute or second; the Summary page only gives
-that when there was one AT/AF event (total time = longest), otherwise a box is left to fill in. Flagged
+count and the longest episode (AT/AF Overview "Longest" duration, or the total time when there was a single
+event), rounded to the nearest hour, minute or second; otherwise a box is left to fill in. Flagged
 impedance or sensing replaces the fixed "Lead impedance stable" / "Sensing and capture within range" line.
 MV sensor (SAM) messages are ignored.
 

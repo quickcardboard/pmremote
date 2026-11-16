@@ -3,8 +3,8 @@
 (function (root) {
 "use strict";
 
-var SITES = ["JPOCSC", "PAH", "DH", "RMH", "ERH", "LMH"];
-var DEFAULTS = { impLow: 200, impHigh: 1000, impChangePct: 20, pMin: 1.5, rMin: 5, thrMax: 1.5, thrDelta: 0.25, vpMax: 40, burdenWarn: 1, batteryWarn: 1, site: "JPOCSC" };
+var SITES = ["LMH", "JPOCSC", "SMH", "ERH", "DH", "PAH", "RMH", "ARH"];
+var DEFAULTS = { impLow: 200, impHigh: 1000, impChangePct: 20, pMin: 1.5, rMin: 5, thrMax: 1.5, thrDelta: 0.25, vpMax: 40, burdenWarn: 1, batteryWarn: 1 };
 var THR_LABELS = [
   ["impLow", "Pacing lead impedance low (Ω)"], ["impHigh", "Pacing lead impedance high (Ω)"],
   ["impChangePct", "Impedance change since last check (%)"], ["pMin", "P wave below (mV)"], ["rMin", "R wave below (mV)"],
@@ -28,11 +28,15 @@ function parseLatitude(text) {
 
   d.patient.name = grab(/Patient(?: Name)?:\s*([^\n]+)/i);
   d.patient.dob = grab(/Date of Birth:\s*([^\n]+)/i);
-  var dev = grab(/Device:\s*([^\n]+(?:\n[^\n:]*\/\s*\d+)?)/i);
-  if (dev) {
-    dev = dev.replace(/\n/g, " ");
+  // "Device: L331 ACCOLADE MRI EL/990147"; the "MODEL/serial" tail may wrap onto a later line
+  var di = L.findIndex(function (s) { return /^Device:/i.test(s); });
+  if (di >= 0) {
+    var dev = L[di].replace(/^Device:\s*/i, "");
+    for (var w = di + 1; w <= di + 3 && w < L.length && !/\/\s*\d+\s*$/.test(dev); w++) {
+      if (/^[A-Z0-9 -]*\/\s*\d+$/.test(L[w])) dev += " " + L[w];
+    }
     var sm = dev.match(/^(.*?)\s*\/\s*(\d+)\s*$/);
-    d.device.model = sm ? sm[1] : dev;
+    d.device.model = (sm ? sm[1] : dev).trim();
     d.device.serial = sm ? sm[2] : null;
   }
   var tags = grab(/Search Tags:\s*([^\n]+)/i);
@@ -106,8 +110,9 @@ function parseLatitude(text) {
   }
 
   // AT/AF burden and event counts
-  var burden = J.match(/AT\/AF(?:\s*\([^)]*\))?\s+(\d+(?:\.\d+)?|N\/R)\s*%/i);
-  d.atrial_burden_percent = burden && /\d/.test(burden[1]) ? +burden[1] : null;
+  var burden = J.match(/AT\/AF(?:\s*\([^)]*\))?\s+([<>]?)\s*(\d+(?:\.\d+)?|N\/R)\s*%/i);
+  d.atrial_burden_percent = burden && /\d/.test(burden[2]) ? +burden[2] : null;
+  d.atrial_burden_op = burden && d.atrial_burden_percent != null ? burden[1] : "";
   var cnt = function (re) { var mm = J.match(re); return mm && /\d/.test(mm[1]) ? +mm[1] : null; };
   var ep = [
     ["VT", cnt(/(?<![A-Za-z])VT Episodes\s*(?:\([^)]*\))?\s+(\d+|N\/R)/i), "VT episodes (V>A)"],
@@ -125,6 +130,9 @@ function parseLatitude(text) {
   d.atrial_total_seconds = tt ? durSeconds(tt[2], tt[1]) : null;
   var ahrN = (d.episodes.filter(function (e) { return e.type === "AHR"; })[0] || {}).count;
   d.ahr_longest = ahrN === 1 && d.atrial_total_seconds ? fmtDur(d.atrial_total_seconds) : null;
+  // The overview lists "Longest (date) / Avg V Rate, Duration (hh:mm:ss) / 69 min-1, 00:00:07": use it when present.
+  var lg = (ov >= 0 ? J.slice(ov, ov + 900) : "").match(/(?:^|\n)Longest\b[^\n]*\n[\s\S]{0,160}?Duration[\s\S]{0,80}?(\d+:\d{2}:\d{2})/i);
+  if (lg) d.ahr_longest = fmtDur(durSeconds(lg[1])) || d.ahr_longest;
   var shocks = cnt(/Shocks?(?: Delivered)?\s+(\d+)/i), atp = cnt(/ATP(?: Delivered| Therapies)?\s+(\d+)/i);
   d.therapies_delivered = (shocks || 0) + (atp || 0) || null;
 
@@ -200,7 +208,8 @@ function evaluate(d, T) {
   });
   var vp = (d.pacing_percent || {}).ventricular;
   if (vp != null && vp > T.vpMax) add("warn", "Ventricular pacing " + vp + "%", "> " + T.vpMax + "%", "vp");
-  if (d.atrial_burden_percent != null && d.atrial_burden_percent >= T.burdenWarn) add("warn", "AT/AF burden " + d.atrial_burden_percent + "%", "≥ " + T.burdenWarn + "%", "burden");
+  if (!d.site) add("warn", "No clinic in search tags", "Expected one of " + SITES.join(", ") + (d.tags.length ? "; tags: " + d.tags.join(" ") : ""), "site");
+  if (d.atrial_burden_percent != null && d.atrial_burden_op !== "<" && d.atrial_burden_percent >= T.burdenWarn) add("warn", "AT/AF burden " + d.atrial_burden_op + d.atrial_burden_percent + "%", "≥ " + T.burdenWarn + "%", "burden");
   (d.episodes || []).forEach(function (e) { add(LEVEL[e.type] || "warn", e.count + " × " + e.label, "Since last reset" + (d.since_reset ? " (" + d.since_reset + ")" : ""), "ep"); });
   if (d.therapies_delivered) add("critical", d.therapies_delivered + " therapies delivered", "Any delivered therapy", "ep");
   (d.device_alerts || []).forEach(function (s) { add("warn", "Alert: " + s, "LATITUDE alert", "alert"); });
@@ -231,13 +240,13 @@ function template(d, flags, T) {
   var af48 = by(["AF48"]);
   if (af48) ep.push(pl(af48, "atrial episode") + " longer than 48 hours noted, " + inp("det-af48", "details from the EGM"));
   out = out.concat(ep.length ? ep : ["No high rate episodes were noted."]);
-  out.push("Atrial burden: " + val(d.atrial_burden_percent, "burden", "%") + "%");
+  out.push("Atrial burden: " + val(d.atrial_burden_percent != null ? (d.atrial_burden_op || "") + d.atrial_burden_percent : null, "burden", "%") + "%");
   var line = function (tag) { return flags.filter(function (f) { return f.tag === tag && f.level !== "info"; }).map(function (f) { return f.title; }).join("; "); };
   var imp = line("imp"), sen = line("sense");
   out.push(imp ? '<span class="flagged">Lead impedance: ' + esc(imp) + "</span>" : "Lead impedance stable");
   out.push(sen ? '<span class="flagged">Sensing/capture: ' + esc(sen) + "</span>" : "Sensing and capture within range");
   out.push("Estimated battery longevity is " + val(d.battery.years, "batt", "#") + " years");
-  out.push("Next appointment with " + esc(d.site || T.site));
+  out.push("Next appointment with " + val(d.site, "site", "clinic"));
   var extra = (d.therapies_delivered ? [d.therapies_delivered + " therapies delivered."] : []).concat(d.device_notes || []);
   if (extra.length) out.push(esc(extra.join(" ")));
   out.push('<select class="report-select" data-k="action">' + ACTIONS.map(function (a) { return '<option value="' + a + '">' + a + "</option>"; }).join("") + "</select>");

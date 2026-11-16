@@ -55,4 +55,11 @@ eq([P.durSeconds("01:02:03"), P.durSeconds("2 hr 5 min"), P.durSeconds("12", "mi
 
 const junk = P.parseLatitude("hello world");
 eq(junk.recognised, false, "unrecognised page");
+const dl = load("delta.txt");
+eq(dl.device.serial, "900011", "serial on the line after the model");
+eq(dl.site, null, "Search Tags: None");
+eq([dl.atrial_burden_op, dl.atrial_burden_percent], ["<", 1], "burden <1 %");
+eq(dl.ahr_longest, "7 seconds", "longest from the AT/AF overview");
+const fd = P.evaluate(dl, P.DEFAULTS).map((f) => f.level + ": " + f.title);
+eq(fd, ["warn: Ventricular pacing 100%", "warn: No clinic in search tags", "warn: 2 × AT/AF events"], "delta flags (burden <1% not flagged)");
 console.log("ok", n, "checks");
