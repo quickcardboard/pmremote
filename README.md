@@ -1,7 +1,7 @@
 # PM Remote
 
-Reads a Boston Scientific LATITUDE **Summary** page, flags values outside the clinic's thresholds and fills
-the remote-transmission report template, ready to paste into Paceart. Everything runs in the browser:
+Reads Boston Scientific LATITUDE (Summary page) and Medtronic CareLink (pacemaker/ICD Quick Look II, Reveal LINQ
+Quick Look) remote transmissions, flags values outside the clinic's thresholds and fills the report template, ready to paste into Paceart. Everything runs in the browser:
 no server, no upload, no AI.
 
 ## Use
@@ -46,6 +46,19 @@ count and the longest episode (AT/AF Overview "Longest" duration, or the total t
 event), rounded to the nearest hour, minute or second; otherwise a box is left to fill in. Flagged
 impedance or sensing replaces the fixed "Lead impedance stable" / "Sensing and capture within range" line.
 MV sensor (SAM) messages are ignored.
+
+## Medtronic CareLink
+
+- Pacemakers and ICDs: same template and alerts as LATITUDE, fixed limits only (CareLink shows no in-office values).
+  VHR = VT (>4 beats), VT-NS, High Rate-NS; SVT = SVT and Fast A&V; AHR = AT/AF; burden from the bracketed %.
+  ICDs add "No therapies delivered" / "Therapy delivered: [box]" (critical alert), "Lead and HV impedance stable",
+  HV 20–150 Ω, and oversensing alerts. Clinic is a drop-down starting on JPOCSC.
+- Longest VHR, SVT (with V rate over 100) and AT/AF episodes come from the Episodes tab, read in the background;
+  if that fails, press PM Remote on the Episodes tab and it is saved for that transmission.
+- Reveal LINQ: loop template (reason, events with the longest of each type, burden, R wave, battery, Meditech date,
+  action); no alerts.
+- LATITUDE Events tab: longest V-# event minus 10 s, with its onset rate, read the same way.
+- The panel closes itself when another patient or transmission appears.
 
 ## Develop
 
