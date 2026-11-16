@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>
+<title>Remote Transmission Reader</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: two working columns — input on the left, flags + report on the right; stacks on phones. */
+:root {
+  --bg: #f3f5f6; --panel: #ffffff; --fg: #17232b; --muted: #5a6b75; --line: #d6dee2;
+  --accent: #0f5e7a; --accent-ink: #ffffff; --accent-soft: #e2eff4;
+  --crit: #b4232c; --crit-soft: #fbe9ea; --warn: #9a5b00; --warn-soft: #fdf1dc;
+  --ok: #1f7a4a; --ok-soft: #e4f4ea; --info: #4a5a66; --info-soft: #eceff1;
+  --field: #fffdf3; --field-line: #c9b98a;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11181d; --panel: #18222a; --fg: #e3eaee; --muted: #93a4ae; --line: #2c3a44;
+  --accent: #5fb4d3; --accent-ink: #0b1a21; --accent-soft: #1b3440;
+  --crit: #ff7b82; --crit-soft: #3a1c20; --warn: #f0b552; --warn-soft: #36290f;
+  --ok: #6fd39a; --ok-soft: #15301f; --info: #a9b7c0; --info-soft: #222d34;
+  --field: #232c22; --field-line: #6b6440; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #11181d; --panel: #18222a; --fg: #e3eaee; --muted: #93a4ae; --line: #2c3a44;
+  --accent: #5fb4d3; --accent-ink: #0b1a21; --accent-soft: #1b3440;
+  --crit: #ff7b82; --crit-soft: #3a1c20; --warn: #f0b552; --warn-soft: #36290f;
+  --ok: #6fd39a; --ok-soft: #15301f; --info: #a9b7c0; --info-soft: #222d34;
+  --field: #232c22; --field-line: #6b6440; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.5 }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; margin-bottom: 16px }
+h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -0.01em }
+h1 small { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 8px }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; font-weight: 600 }
+.grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr) } }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0 }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0 }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden }
+.seg button { border: 0; background: transparent; color: var(--fg); padding: 7px 14px; font: inherit; font-size: 14px; cursor: pointer }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink) }
+.seg button + button { border-left: 1px solid var(--line) }
+
+.drop { border: 1.5px dashed var(--line); border-radius: 8px; padding: 18px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft) }
+.drop strong { color: var(--fg) }
+.shots { display: flex; flex-direction: column; gap: 12px; margin-top: 12px }
+.shot { border: 1px solid var(--line); border-radius: 6px; overflow: hidden }
+.shot canvas { display: block; width: 100%; height: auto; cursor: crosshair; touch-action: none; background: var(--info-soft) }
+.shot .bar { display: flex; gap: 8px; align-items: center; padding: 6px 8px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line) }
+.shot .bar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.hint { font-size: 13px; color: var(--muted); margin: 8px 0 0 }
+textarea { width: 100%; min-height: 110px; resize: vertical; font: 13px/1.45 var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px }
+label.lbl { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px }
+
+.btn { font: inherit; font-size: 14px; border-radius: 6px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--fg) }
+.btn:hover { border-color: var(--accent) }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 500 }
+.btn.small { padding: 3px 9px; font-size: 12px }
+.btn:disabled { opacity: .55; cursor: default }
+.btn:focus-visible, .seg button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px }
+.status { font-size: 13px; color: var(--muted) }
+.status.err { color: var(--crit) }
+
+/* Flags */
+.verdict { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; padding: 10px 12px; border-radius: 6px; margin-bottom: 10px }
+.verdict.crit { background: var(--crit-soft); color: var(--crit) }
+.verdict.warn { background: var(--warn-soft); color: var(--warn) }
+.verdict.ok { background: var(--ok-soft); color: var(--ok) }
+.verdict .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: none }
+.flags { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px }
+.flags li { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px }
+.flags li:last-child { border-bottom: 0 }
+.pill { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; text-align: center }
+.pill.critical { background: var(--crit-soft); color: var(--crit) }
+.pill.warn { background: var(--warn-soft); color: var(--warn) }
+.pill.info { background: var(--info-soft); color: var(--info) }
+.flags .rule { display: block; color: var(--muted); font-size: 12px }
+
+/* Values table */
+.tbl-wrap { overflow-x: auto }
+table { width: 100%; border-collapse: collapse; font-size: 13px }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font-weight: 500; color: var(--muted); font-size: 12px }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap }
+td.bad { color: var(--crit); font-weight: 600 }
+td.meh { color: var(--warn); font-weight: 600 }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); margin-bottom: 10px }
+.meta b { color: var(--fg); font-weight: 500 }
+details.ev summary { cursor: pointer; font-size: 13px; color: var(--muted); margin-top: 10px }
+details.ev dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; font-size: 12px; margin: 8px 0 0 }
+details.ev dt { color: var(--muted); font-family: var(--mono) }
+details.ev dd { margin: 0 }
+
+/* Report: the user's own template */
+.text-block { font-size: 15px; line-height: 2.1; padding: 14px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); outline: none; min-width: 0; overflow-wrap: anywhere }
+.text-block:focus { border-color: var(--accent) }
+.report-select { font: inherit; font-size: 14px; color: var(--fg); background: var(--field); border: 1px solid var(--field-line); border-radius: 4px; padding: 1px 4px; max-width: 100% }
+.report-select.needs { border-color: var(--crit); box-shadow: 0 0 0 2px var(--crit-soft) }
+.fill-input, .date-input { font: 14px var(--mono); color: var(--fg); background: var(--field); border: 1px solid var(--field-line); border-radius: 4px; padding: 1px 6px }
+.w-short { width: 6.5em }
+.w-long { width: min(22em, 100%) }
+.autoline.flagged { color: var(--crit); font-weight: 600 }
+.prefilled { box-shadow: inset 0 -2px 0 var(--accent) }
+.example { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--warn); background: var(--warn-soft); padding: 2px 8px; border-radius: 4px }
+
+details.settings summary { cursor: pointer; font-weight: 500 }
+.thr { display: grid; grid-template-columns: minmax(0, 1fr) 7em; gap: 6px 12px; align-items: center; font-size: 14px; margin-top: 12px }
+.thr input, .thr select { font: 14px var(--mono); padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); width: 100% }
+.privacy { font-size: 13px; color: var(--muted); border-left: 3px solid var(--warn); padding: 2px 0 2px 10px; margin: 12px 0 0 }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Remote Transmission Reader<small>pacemaker and loop recorder remotes</small></h1>
+    <div class="seg" role="group" aria-label="Device template">
+      <button id="kind-remote" aria-pressed="true">Pacemaker remote</button>
+      <button id="kind-loop" aria-pressed="false">Loop recorder</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <section class="panel">
+        <h2>Transmission</h2>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Add screenshots or PDF">
+          <strong>Drop screenshots or a PDF here</strong><br>
+          or click to choose files, or paste a screenshot (Ctrl/⌘ V)
+        </div>
+        <input type="file" id="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple hidden>
+        <p class="privacy">Drag across a screenshot to black out the patient's name, date of birth and MRN before reading. Only the blacked-out image is sent.</p>
+        <div class="shots" id="shots"></div>
+        <label class="lbl" for="pasted">Or paste the transmission text (remove identifiers first)</label>
+        <textarea id="pasted" placeholder="Battery: 7.5 years&#10;RA impedance 480 Ω, P wave 2.1 mV, threshold 0.75 V @ 0.4 ms&#10;…"></textarea>
+        <div class="actions">
+          <button class="btn primary" id="read">Read transmission</button>
+          <button class="btn" id="stop" hidden>Stop</button>
+          <button class="btn" id="clear">Clear</button>
+          <span class="status" id="status"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <details class="settings" id="settings">
+          <summary>Alert thresholds</summary>
+          <p class="hint">Saved in this browser. Flags come from these rules, not from Claude's judgement.</p>
+          <div class="thr" id="thr"></div>
+          <div class="actions"><button class="btn small" id="thr-reset">Restore defaults</button></div>
+        </details>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel" id="flags-panel">
+        <h2>Flags <span id="example-tag"></span></h2>
+        <div id="verdict"></div>
+        <ul class="flags" id="flags"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>Report</h2>
+        <div id="report-host"></div>
+        <div class="actions">
+          <button class="btn primary" id="copy">Copy report</button>
+          <span class="status" id="copy-status"></span>
+        </div>
+        <label class="lbl" for="preview">Text that will be copied</label>
+        <textarea id="preview" readonly></textarea>
+      </section>
+
+      <section class="panel">
+        <h2>Values read</h2>
+        <div id="values"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+/* ---------- Thresholds ---------- */
+const THR_DEFS = [
+  ["impLow", "Pacing lead impedance low (Ω)", 200],
+  ["impHigh", "Pacing lead impedance high (Ω)", 2000],
+  ["impChangePct", "Impedance change vs previous (%)", 30],
+  ["pMin", "P-wave amplitude below (mV)", 1.5],
+  ["rMin", "R-wave amplitude below (mV)", 5],
+  ["thrMax", "Capture threshold above (V)", 2.5],
+  ["vpMax", "Ventricular pacing above (%)", 40],
+  ["burdenWarn", "Atrial burden at or above (%)", 1],
+  ["batteryWarn", "Battery longevity at or below (years)", 1],
+];
+let T = Object.assign(Object.fromEntries(THR_DEFS.map(([k, , d]) => [k, d])), store.get("rtr.thr", {}));
+function renderThr() {
+  const host = $("thr"); host.textContent = "";
+  for (const [k, label] of THR_DEFS) {
+    const l = document.createElement("label"); l.htmlFor = "thr-" + k; l.textContent = label;
+    const i = document.createElement("input"); i.type = "number"; i.step = "any"; i.id = "thr-" + k; i.value = T[k];
+    i.addEventListener("change", () => { const n = parseFloat(i.value); if (isFinite(n)) { T[k] = n; store.set("rtr.thr", T); refresh(); } });
+    host.append(l, i);
+  }
+  const l = document.createElement("label"); l.htmlFor = "thr-site"; l.textContent = "Default next-appointment site";
+  const s = document.createElement("select"); s.id = "thr-site";
+  for (const x of SITES) s.add(new Option(x, x));
+  s.value = store.get("rtr.site", SITES[0]);
+  s.addEventListener("change", () => store.set("rtr.site", s.value));
+  host.append(l, s);
+}
+const SITES = ["JPOCSC", "PAH", "DH", "RMH", "ERH", "LMH"];
+$("thr-reset").onclick = () => { T = Object.fromEntries(THR_DEFS.map(([k, , d]) => [k, d])); store.set("rtr.thr", {}); renderThr(); refresh(); };
+
+/* ---------- Templates (the author's own wording) ---------- */
+const TEMPLATES = {
+remote: `<div class="text-block template-content" data-template="remote" contenteditable="true" spellcheck="false">
+Transmission received due to <select class="report-select" id="r-reason">
+  <option value="scheduled transmission.">Scheduled</option>
+  <option value="patient initiation, this is the first transmission">First transmission</option>
+  <option value="patient initiation.">Patient initiation</option>
+  <option value="atrial burden.">Atrial burden</option>
+  <option value="VT episodes.">VT</option>
+  <option value="intrinsic amplitude out of range.">Amplitude OOR</option>
+  <option value="atrial automatic threshold suspended.">Threshold suspended</option>
+  <option value="ERROR CODE 1003.">Error code 1003</option>
+  <option value="">None</option>
+</select><br>
+<span id="remotepm-episodes-count"><input type="text" class="fill-input w-short" id="r-epcount" placeholder="Count"> </span><select class="report-select conditional-trigger" id="r-episodes">
+  <option value="No high rate episodes were noted.">No episodes</option>
+  <option value="episodes of AHR noted, ">AHR</option>
+  <option value="episodes of VHR noted, ">VHR</option>
+  <option value="episodes of NS-VT noted, ">NS-VT</option>
+  <option value="episodes of SVT noted, ">SVT</option>
+</select><br>
+Atrial burden: <input type="text" class="fill-input w-short" id="r-burden" value="0">% <br>
+<span class="autoline" id="r-imp">Lead impedance stable</span> <br>
+<span class="autoline" id="r-sense">Sensing and capture within range</span> <br>
+Estimated battery longevity is <input type="text" class="fill-input w-short" id="r-batt" placeholder="# years"> years <br>
+Next appointment with <select class="report-select" id="r-site">${SITES.map((s) => `<option value="${s}">${s}</option>`).join("")}</select><br>
+<span id="r-comment-line"><span class="autoline" id="r-comment"></span><br></span>
+<select class="report-select" id="r-action">
+  <option value="" hidden>Choose action…</option>
+  <option value="No actions taken">No actions</option>
+  <option value="Site notified by email, report routed to working group">Site notified</option>
+  <option value="Cardiologist notified, report routed and Meditech ordered">Cardiologist notified</option>
+</select>
+</div>`,
+loop: `<div class="text-block template-content" data-template="loop" contenteditable="true" spellcheck="false">
+Remote transmission received due to <select class="report-select" id="l-reason">
+  <option value="manual transmission.">Manual</option>
+  <option value="patient symptoms.">Symptoms</option>
+  <option value="scheduled transmission.">Scheduled</option>
+  <option value="ventricular high rate episodes.">Tachy</option>
+  <option value="bradycardia.">Brady</option>
+  <option value="atrial fibrillation.">AF</option>
+  <option value="pause.">Pause</option>
+</select><br>
+<select class="report-select" id="l-events">
+  <option value="No new events recorded">No events</option>
+  <option value="ventricular high rate episodes noted, ">VHR</option>
+  <option value="episodes of atrial fibrillation, longest episode lasting ">AF</option>
+  <option value="pause episodes noted, ">Pause</option>
+</select><span id="l-detail-wrap"><input type="text" class="fill-input w-long" id="l-detail" placeholder="details"></span><br>
+Atrial burden: <input type="text" class="fill-input w-short" id="l-burden" value="0">% <br>
+R wave sensing: <select class="report-select" id="l-rwave">
+  <option value="good">Good</option>
+  <option value="oversensing noted">Oversensing</option>
+  <option value="undersensing noted">Undersensing</option>
+</select><br>
+Battery status: <select class="report-select" id="l-batt">
+  <option value="OK">OK</option>
+  <option value="End of service, explant recommended. Report sent to cardiologist">EOS</option>
+</select><br>
+Meditech last ordered: <input type="date" class="date-input" id="l-meditech"><br>
+<span id="l-comment-line"><span class="autoline" id="l-comment"></span><br></span>
+<select class="report-select" id="l-action">
+  <option value="" hidden>Choose action…</option>
+  <option value="No actions taken">No action</option>
+  <option value="Meditech ordered, report routed">Meditech ordered</option>
+  <option value="Cardiologist notified">Notified</option>
+</select>
+</div>`,
+};
+
+/* ---------- State ---------- */
+let kind = "remote";
+let data = null;        // extracted values
+let isExample = false;
+let shots = [];         // {name, img, canvas, rects}
+let ctl = null;
+
+/* ---------- Example (fictional) ---------- */
+const EXAMPLE = {
+  device: { kind: "pacemaker", manufacturer: "Example Medical", model: "Dual-chamber pacemaker", mode: "DDDR" },
+  transmission_date: "2026-11-12", reason: "scheduled", reason_text: "Scheduled remote follow-up",
+  battery: { years: 7.5, status: "OK", voltage: null },
+  leads: [
+    { chamber: "RA", impedance_ohm: 480, previous_impedance_ohm: 500, amplitude_mv: 2.1, threshold_v: 0.75, threshold_pw_ms: 0.4, output_v: 2.0 },
+    { chamber: "RV", impedance_ohm: 2240, previous_impedance_ohm: 610, amplitude_mv: 9.8, threshold_v: 1.0, threshold_pw_ms: 0.4, output_v: 2.5 },
+  ],
+  pacing_percent: { atrial: 12, ventricular: 48 }, atrial_burden_percent: 3.2,
+  episodes: [{ type: "AHR", count: 4, longest: "2 h 05 min", max_rate_bpm: 168, note: null }],
+  therapies_delivered: null, r_wave_sensing: null, device_alerts: ["RV pacing impedance out of range"],
+  comment: "RV lead impedance has risen from 610 to 2240 Ω since the last transmission.",
+  evidence: { "leads.RV.impedance_ohm": "Leads table: RV Pacing Impedance 2240 Ω (last session 610 Ω)", "battery.years": "Battery: ~7.5 years remaining" },
+  unreadable: [],
+};
+
+/* ---------- Rules ---------- */
+const num = (v) => (typeof v === "number" && isFinite(v) ? v : null);
+const EP_LEVEL = { VT: "critical", VF: "critical", pause: "critical", NSVT: "warn", VHR: "warn", AHR: "warn", SVT: "warn", AF: "warn", brady: "warn", symptom: "warn", other: "info" };
+const EP_NAME = { VT: "VT", VF: "VF", pause: "Pause", NSVT: "NS-VT", VHR: "VHR", AHR: "AHR", SVT: "SVT", AF: "AF", brady: "Bradycardia", symptom: "Patient-activated / symptom", other: "Other" };
+
+function evaluate(d) {
+  const f = [];
+  const add = (level, title, rule, tag) => f.push({ level, title, rule, tag });
+  const loop = kind === "loop";
+  const b = d.battery || {};
+  if (b.status && /ERI|RRT|EOS/i.test(b.status)) add("critical", `Battery ${b.status}`, "Battery at replacement indicator or end of service", "batt");
+  else if (num(b.years) != null && b.years <= T.batteryWarn) add("warn", `Battery longevity ${b.years} years`, `≤ ${T.batteryWarn} years`, "batt");
+  else if (!loop && num(b.years) == null) add("info", "Battery longevity not found", "Check the battery value by hand", "batt");
+
+  for (const L of d.leads || []) {
+    const ch = L.chamber || "Lead", hv = ch === "HV";
+    const z = num(L.impedance_ohm), zp = num(L.previous_impedance_ohm);
+    const lo = hv ? 20 : T.impLow, hi = hv ? 150 : T.impHigh;
+    if (z != null && (z < lo || z > hi)) add("critical", `${ch} impedance ${z} Ω`, `Outside ${lo}–${hi} Ω`, "imp");
+    if (z != null && zp != null && zp > 0) {
+      const pct = Math.round(Math.abs(z - zp) / zp * 100);
+      if (pct > T.impChangePct) add("warn", `${ch} impedance changed ${pct}% (${zp} → ${z} Ω)`, `Change > ${T.impChangePct}% from previous`, "imp");
+    }
+    const a = num(L.amplitude_mv);
+    if (a != null && ch === "RA" && a < T.pMin) add("warn", `P wave ${a} mV`, `< ${T.pMin} mV`, "sense");
+    if (a != null && (ch === "RV" || ch === "LV") && a < T.rMin) add("warn", `${ch} R wave ${a} mV`, `< ${T.rMin} mV`, "sense");
+    const t = num(L.threshold_v);
+    if (t != null && !hv && t > T.thrMax) add("warn", `${ch} capture threshold ${t} V`, `> ${T.thrMax} V`, "sense");
+    const o = num(L.output_v);
+    if (t != null && o != null && !hv && o < 2 * t) add("warn", `${ch} output ${o} V is under twice the ${t} V threshold`, "Safety margin under 2×", "sense");
+  }
+  const vp = num((d.pacing_percent || {}).ventricular);
+  if (vp != null && vp > T.vpMax) add("warn", `Ventricular pacing ${vp}%`, `> ${T.vpMax}%`, "vp");
+  const burden = num(d.atrial_burden_percent);
+  if (burden != null && burden >= T.burdenWarn) add("warn", `Atrial burden ${burden}%`, `≥ ${T.burdenWarn}%`, "burden");
+  for (const e of d.episodes || []) {
+    const lvl = EP_LEVEL[e.type] || "info";
+    const bits = [e.count != null ? `${e.count} × ` : "", EP_NAME[e.type] || e.type, " episode", e.count === 1 ? "" : "s",
+      e.max_rate_bpm ? `, up to ${e.max_rate_bpm} bpm` : "", e.longest ? `, longest ${e.longest}` : ""].join("");
+    add(lvl, bits, e.note || "Any episode of this type is flagged", "ep");
+  }
+  if (num(d.therapies_delivered) > 0) add("critical", `${d.therapies_delivered} therapies delivered`, "Any delivered therapy", "ep");
+  if (loop && d.r_wave_sensing && d.r_wave_sensing !== "good") add("warn", `R-wave ${d.r_wave_sensing}`, "Sensing problem reported", "sense");
+  for (const a of d.device_alerts || []) add("warn", `Device alert: ${a}`, "Alert raised by the device", "alert");
+  if (d.reason && !["scheduled", "manual", "patient", "first", "unknown"].includes(d.reason)) add("info", `Alert-triggered transmission: ${d.reason_text || d.reason}`, "Transmission was not scheduled", "reason");
+  for (const u of d.unreadable || []) add("info", `Not read: ${u}`, "Check by hand", "missing");
+  const order = { critical: 0, warn: 1, info: 2 };
+  return f.sort((a, b) => order[a.level] - order[b.level]);
+}
+
+/* ---------- Render flags + values ---------- */
+function renderFlags(flags) {
+  const crit = flags.filter((f) => f.level === "critical").length, warn = flags.filter((f) => f.level === "warn").length;
+  const v = $("verdict");
+  if (!data) { v.innerHTML = ""; $("flags").innerHTML = '<li style="display:block;color:var(--muted)">Add a transmission and choose Read transmission.</li>'; return; }
+  const cls = crit ? "crit" : warn ? "warn" : "ok";
+  const msg = crit ? `${crit} critical, ${warn} to review` : warn ? `${warn} item${warn > 1 ? "s" : ""} to review` : "Nothing out of range";
+  v.innerHTML = `<div class="verdict ${cls}"><span class="dot"></span><span></span></div>`;
+  v.querySelector("span:last-child").textContent = msg;
+  const ul = $("flags"); ul.textContent = "";
+  for (const fl of flags) {
+    const li = document.createElement("li");
+    const p = document.createElement("span"); p.className = "pill " + fl.level; p.textContent = fl.level === "critical" ? "Critical" : fl.level === "warn" ? "Review" : "Note";
+    const t = document.createElement("span"); t.textContent = fl.title;
+    const r = document.createElement("span"); r.className = "rule"; r.textContent = fl.rule; t.append(r);
+    li.append(p, t); ul.append(li);
+  }
+}
+
+function renderValues(d, flags) {
+  const host = $("values"); host.textContent = "";
+  if (!d) { host.innerHTML = '<p class="hint">Nothing read yet.</p>'; return; }
+  const meta = document.createElement("div"); meta.className = "meta";
+  const dev = d.device || {};
+  const pairs = [["Device", [dev.manufacturer, dev.model].filter(Boolean).join(" ") || "—"], ["Mode", dev.mode || "—"], ["Date", d.transmission_date || "—"],
+    ["Reason", d.reason_text || d.reason || "—"], ["Battery", d.battery ? [num(d.battery.years) != null ? d.battery.years + " y" : null, d.battery.status].filter(Boolean).join(", ") || "—" : "—"],
+    ["Pacing", d.pacing_percent ? `A ${d.pacing_percent.atrial ?? "—"}% · V ${d.pacing_percent.ventricular ?? "—"}%` : "—"], ["Atrial burden", num(d.atrial_burden_percent) != null ? d.atrial_burden_percent + "%" : "—"]];
+  for (const [k, val] of pairs) { const s = document.createElement("span"); s.append(k + ": "); const b = document.createElement("b"); b.textContent = val; s.append(b); meta.append(s); }
+  host.append(meta);
+  if ((d.leads || []).length) {
+    const w = document.createElement("div"); w.className = "tbl-wrap";
+    const tb = document.createElement("table");
+    tb.innerHTML = "<thead><tr><th>Lead</th><th>Impedance Ω</th><th>Previous Ω</th><th>Sensing mV</th><th>Threshold</th><th>Output V</th></tr></thead><tbody></tbody>";
+    for (const L of d.leads) {
+      const tr = document.createElement("tr");
+      const z = num(L.impedance_ohm), hv = L.chamber === "HV";
+      const zBad = z != null && (z < (hv ? 20 : T.impLow) || z > (hv ? 150 : T.impHigh));
+      const a = num(L.amplitude_mv); const aBad = a != null && ((L.chamber === "RA" && a < T.pMin) || ((L.chamber === "RV" || L.chamber === "LV") && a < T.rMin));
+      const t = num(L.threshold_v); const tBad = t != null && !hv && t > T.thrMax;
+      const cells = [[L.chamber || "?", ""], [z ?? "—", zBad ? "bad" : ""], [L.previous_impedance_ohm ?? "—", ""], [a ?? "—", aBad ? "meh" : ""],
+        [t != null ? `${t} V${L.threshold_pw_ms ? " @ " + L.threshold_pw_ms + " ms" : ""}` : "—", tBad ? "meh" : ""], [L.output_v ?? "—", ""]];
+      cells.forEach(([val, c], i) => { const td = document.createElement("td"); td.textContent = val; td.className = (i ? "num " : "") + c; tr.append(td); });
+      tb.tBodies[0].append(tr);
+    }
+    w.append(tb); host.append(w);
+  }
+  const ev = d.evidence || {};
+  if (Object.keys(ev).length) {
+    const det = document.createElement("details"); det.className = "ev";
+    det.innerHTML = "<summary>Where each value was read from</summary><dl></dl>";
+    for (const [k, val] of Object.entries(ev)) { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = val; det.lastChild.append(dt, dd); }
+    host.append(det);
+  }
+}
+
+/* ---------- Fill the template ---------- */
+const setSel = (id, value) => { const s = $(id); if (!s) return; const i = [...s.options].findIndex((o) => o.value === value); if (i >= 0) { s.selectedIndex = i; s.classList.add("prefilled"); } };
+const setVal = (id, value) => { const e = $(id); if (e && value != null && value !== "") { e.value = String(value); e.classList.add("prefilled"); } };
+const fmt = (n) => (Math.round(n * 10) / 10).toString();
+
+function fillTemplate(d, flags) {
+  const host = $("report-host");
+  host.innerHTML = TEMPLATES[kind];
+  const site = store.get("rtr.site", SITES[0]);
+  const needsAction = flags.some((f) => f.level !== "info");
+  if (kind === "remote") {
+    $("r-site").value = site;
+    if (d) {
+      const R = { scheduled: "scheduled transmission.", first: "patient initiation, this is the first transmission", patient: "patient initiation.", atrial_burden: "atrial burden.", vt: "VT episodes.", amplitude_oor: "intrinsic amplitude out of range.", threshold_suspended: "atrial automatic threshold suspended.", error_1003: "ERROR CODE 1003." };
+      setSel("r-reason", R[d.reason] ?? "");
+      const map = { VT: "VHR", VF: "VHR", VHR: "VHR", NSVT: "NS-VT", SVT: "SVT", AHR: "AHR", AF: "AHR" };
+      const counts = {};
+      for (const e of d.episodes || []) { const m = map[e.type]; if (m) counts[m] = (counts[m] || 0) + (num(e.count) ?? 1); }
+      const pick = ["VHR", "NS-VT", "SVT", "AHR"].find((k) => counts[k]);
+      if (pick) { setSel("r-episodes", `episodes of ${pick} noted, `); setVal("r-epcount", counts[pick]); }
+      if (num(d.atrial_burden_percent) != null) setVal("r-burden", fmt(d.atrial_burden_percent));
+      if (num((d.battery || {}).years) != null) setVal("r-batt", fmt(d.battery.years));
+      const leadTxt = (tag) => [...new Set(flags.filter((f) => f.tag === tag && f.level !== "info").map((f) => f.title))].join("; ");
+      const imp = leadTxt("imp"), sen = leadTxt("sense");
+      if (imp) { $("r-imp").textContent = "Lead impedance: " + imp; $("r-imp").classList.add("flagged"); }
+      if (sen) { $("r-sense").textContent = "Sensing/capture: " + sen; $("r-sense").classList.add("flagged"); }
+      $("r-comment").textContent = d.comment || "";
+    }
+  } else if (d) {
+    const R = { manual: "manual transmission.", patient: "manual transmission.", first: "manual transmission.", symptoms: "patient symptoms.", scheduled: "scheduled transmission.", tachy: "ventricular high rate episodes.", vt: "ventricular high rate episodes.", brady: "bradycardia.", af: "atrial fibrillation.", atrial_burden: "atrial fibrillation.", pause: "pause." };
+    if (R[d.reason]) setSel("l-reason", R[d.reason]);
+    const eps = d.episodes || [];
+    const of = (types) => eps.filter((e) => types.includes(e.type));
+    const total = (list) => list.reduce((s, e) => s + (num(e.count) ?? 1), 0);
+    const pauses = of(["pause"]), vhr = of(["VHR", "VT", "VF", "NSVT"]), af = of(["AF", "AHR"]);
+    if (pauses.length) { setSel("l-events", "pause episodes noted, "); setVal("l-detail", `${total(pauses)} episode${total(pauses) === 1 ? "" : "s"}${pauses[0].longest ? ", longest " + pauses[0].longest : ""}`); }
+    else if (vhr.length) { const mx = Math.max(0, ...vhr.map((e) => num(e.max_rate_bpm) || 0)); setSel("l-events", "ventricular high rate episodes noted, "); setVal("l-detail", `${total(vhr)} episode${total(vhr) === 1 ? "" : "s"}${mx ? ", fastest " + mx + " bpm" : ""}`); }
+    else if (af.length) { setSel("l-events", "episodes of atrial fibrillation, longest episode lasting "); setVal("l-detail", af.map((e) => e.longest).filter(Boolean)[0] || ""); }
+    if (num(d.atrial_burden_percent) != null) setVal("l-burden", fmt(d.atrial_burden_percent));
+    if (d.r_wave_sensing === "oversensing") setSel("l-rwave", "oversensing noted");
+    if (d.r_wave_sensing === "undersensing") setSel("l-rwave", "undersensing noted");
+    if (/ERI|RRT|EOS/i.test((d.battery || {}).status || "")) setSel("l-batt", "End of service, explant recommended. Report sent to cardiologist");
+    $("l-comment").textContent = d.comment || "";
+  }
+  const act = $(kind === "remote" ? "r-action" : "l-action");
+  if (d && !needsAction) act.selectedIndex = 1; else act.selectedIndex = 0;
+  if (act.selectedIndex === 0) act.classList.add("needs");
+  wireTemplate();
+  updatePreview();
+}
+
+function wireTemplate() {
+  const host = $("report-host");
+  const ep = $("r-episodes"), cnt = $("remotepm-episodes-count");
+  const syncEp = () => { if (ep && cnt) cnt.hidden = ep.value === "No high rate episodes were noted."; };
+  syncEp();
+  const lev = $("l-events"), det = $("l-detail-wrap");
+  const syncL = () => { if (lev && det) det.hidden = lev.value === "No new events recorded"; };
+  syncL();
+  host.addEventListener("change", (e) => {
+    if (e.target === ep) syncEp();
+    if (e.target === lev) syncL();
+    if (e.target.matches("select")) e.target.classList.toggle("needs", e.target.value === "" && /-action$/.test(e.target.id));
+    updatePreview();
+  });
+  host.addEventListener("input", updatePreview);
+}
+
+/* ---------- Report → plain text ---------- */
+function reportText() {
+  const root = document.querySelector("#report-host .text-block");
+  if (!root) return "";
+  let out = "";
+  const walk = (n) => {
+    if (n.nodeType === 3) { out += n.nodeValue.replace(/\s+/g, " "); return; }
+    if (n.nodeType !== 1 || n.hidden) return;
+    const tag = n.tagName;
+    if (tag === "BR" || tag === "DIV" && n !== root) { out += "\n"; if (tag === "BR") return; }
+    if (tag === "SELECT") { out += n.value; return; }
+    if (tag === "INPUT") {
+      if (n.type === "date") { if (n.value) { const [y, m, d] = n.value.split("-"); out += `${y}-${m}-${d}`; } }
+      else out += n.value;
+      return;
+    }
+    for (const c of n.childNodes) walk(c);
+  };
+  walk(root);
+  return out.split("\n").map((l) => l.replace(/ {2,}/g, " ").trim()).filter((l) => l.length).join("\n");
+}
+function updatePreview() { $("preview").value = reportText(); }
+
+$("copy").onclick = () => {
+  const act = document.querySelector("#report-host select[id$='-action']");
+  const st = $("copy-status");
+  if (act && act.value === "") { st.className = "status err"; st.textContent = "Choose the action line first."; act.focus(); return; }
+  const text = reportText();
+  const done = () => { st.className = "status"; st.textContent = "Copied. Paste it into Paceart."; };
+  try {
+    navigator.clipboard.writeText(text).then(done, () => { $("preview").select(); st.className = "status"; st.textContent = "Selected below: press Ctrl/⌘ C."; });
+  } catch { $("preview").select(); st.textContent = "Selected below: press Ctrl/⌘ C."; }
+};
+
+/* ---------- Kind toggle ---------- */
+function setKind(k) {
+  kind = k;
+  $("kind-remote").setAttribute("aria-pressed", k === "remote");
+  $("kind-loop").setAttribute("aria-pressed", k === "loop");
+  store.set("rtr.kind", k);
+  if (isExample || !data) { data = k === "remote" ? EXAMPLE : null; isExample = !!data; }
+  refresh();
+}
+$("kind-remote").onclick = () => setKind("remote");
+$("kind-loop").onclick = () => setKind("loop");
+
+function refresh() {
+  const flags = data ? evaluate(data) : [];
+  $("example-tag").innerHTML = isExample ? '<span class="example">Example, fictional patient</span>' : "";
+  renderFlags(flags);
+  renderValues(data, flags);
+  fillTemplate(data, flags);
+}
+
+/* ---------- Screenshots with black-out boxes ---------- */
+function addImageBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => addShot(img, name);
+  img.onerror = () => status("Could not open " + name + ". Use a PNG, JPEG or WebP image.", true);
+  img.src = url;
+}
+function addShot(src, name) {
+  const canvas = document.createElement("canvas");
+  canvas.width = src.naturalWidth || src.width; canvas.height = src.naturalHeight || src.height;
+  const shot = { name, src, canvas, rects: [] };
+  const box = document.createElement("div"); box.className = "shot";
+  const bar = document.createElement("div"); bar.className = "bar";
+  const label = document.createElement("span"); label.textContent = name;
+  const undo = document.createElement("button"); undo.className = "btn small"; undo.textContent = "Undo box";
+  const rm = document.createElement("button"); rm.className = "btn small"; rm.textContent = "Remove";
+  bar.append(label, undo, rm); box.append(canvas, bar); $("shots").append(box);
+  const draw = (tmp) => {
+    const c = canvas.getContext("2d");
+    c.drawImage(src, 0, 0, canvas.width, canvas.height);
+    c.fillStyle = "#000";
+    for (const r of shot.rects.concat(tmp ? [tmp] : [])) c.fillRect(r.x, r.y, r.w, r.h);
+  };
+  draw();
+  let start = null;
+  const pt = (e) => { const b = canvas.getBoundingClientRect(); return { x: (e.clientX - b.left) * canvas.width / b.width, y: (e.clientY - b.top) * canvas.height / b.height }; };
+  const norm = (a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) });
+  canvas.addEventListener("pointerdown", (e) => { start = pt(e); canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener("pointermove", (e) => { if (start) draw(norm(start, pt(e))); });
+  canvas.addEventListener("pointerup", (e) => { if (!start) return; const r = norm(start, pt(e)); start = null; if (r.w > 4 && r.h > 4) shot.rects.push(r); draw(); });
+  undo.onclick = () => { shot.rects.pop(); draw(); };
+  rm.onclick = () => { shots = shots.filter((s) => s !== shot); box.remove(); };
+  shots.push(shot);
+}
+
+let pdfReady = null;
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.append(s); }); }
+function loadPdfJs() {
+  if (!pdfReady) {
+    const base = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+    pdfReady = loadScript(base + "pdf.min.js").then(() => loadScript(base + "pdf.worker.min.js"));
+  }
+  return pdfReady;
+}
+async function addPdf(file) {
+  status("Opening PDF…");
+  try {
+    await loadPdfJs();
+    const lib = window.pdfjsLib;
+    const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pages = Math.min(doc.numPages, 4);
+    for (let i = 1; i <= pages; i++) {
+      const page = await doc.getPage(i);
+      const vp = page.getViewport({ scale: 1.6 });
+      const c = document.createElement("canvas"); c.width = vp.width; c.height = vp.height;
+      await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+      addShot(c, `${file.name}, page ${i}`);
+    }
+    status(doc.numPages > 4 ? `Added the first 4 of ${doc.numPages} pages.` : "PDF added.");
+  } catch (e) { status("Could not open that PDF. Try a screenshot instead.", true); }
+}
+function takeFiles(files) {
+  for (const f of files) {
+    if (f.type === "application/pdf") addPdf(f);
+    else if (/^image\//.test(f.type)) addImageBlob(f, f.name || "Pasted screenshot");
+  }
+}
+const drop = $("drop");
+drop.onclick = () => $("file").click();
+drop.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } };
+$("file").onchange = (e) => { takeFiles(e.target.files); e.target.value = ""; };
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); takeFiles(e.dataTransfer.files); });
+document.addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
+  if (files.length && !(e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); takeFiles(files); }
+});
+$("clear").onclick = () => { shots = []; $("shots").textContent = ""; $("pasted").value = ""; data = null; isExample = false; status(""); refresh(); };
+
+/* ---------- Ask Claude ---------- */
+function status(msg, err) { const s = $("status"); s.textContent = msg; s.className = "status" + (err ? " err" : ""); }
+
+function buildPrompt(text) {
+  const loop = kind === "loop";
+  return `You are reading a remote transmission from a cardiac implantable electronic device (${loop ? "an implantable loop recorder" : "a pacemaker, possibly an ICD or CRT"}). The attached images are screenshots or PDF pages from the manufacturer's remote monitoring portal; black boxes are deliberate redactions.
+
+Read the values exactly as shown. Do not estimate or infer a number that is not printed. Use null for anything not shown, and list important fields you could not read in "unreadable". Never include a patient name, date of birth, MRN, address or phone number anywhere in your reply.
+
+Reply with only one JSON object of this shape:
+{
+  "device": {"kind": "pacemaker|icd|crt|loop|unknown", "manufacturer": string|null, "model": string|null, "mode": string|null},
+  "transmission_date": "YYYY-MM-DD"|null,
+  "reason": one of ${loop ? '"manual","symptoms","scheduled","tachy","brady","af","pause","unknown"' : '"scheduled","first","patient","atrial_burden","vt","amplitude_oor","threshold_suspended","error_1003","other","unknown"'},
+  "reason_text": string|null (the reason as the portal words it),
+  "battery": {"years": number|null (estimated longevity in years; convert months to years), "status": "OK"|"ERI"|"RRT"|"EOS"|null, "voltage": number|null},
+  "leads": [{"chamber": "RA"|"RV"|"LV"|"HV", "impedance_ohm": number|null, "previous_impedance_ohm": number|null, "amplitude_mv": number|null (P or R wave), "threshold_v": number|null, "threshold_pw_ms": number|null, "output_v": number|null}],
+  "pacing_percent": {"atrial": number|null, "ventricular": number|null},
+  "atrial_burden_percent": number|null (AT/AF burden or time in AT/AF since last transmission),
+  "episodes": [{"type": "AHR"|"VHR"|"NSVT"|"SVT"|"VT"|"VF"|"AF"|"pause"|"brady"|"symptom"|"other", "count": number|null, "longest": string|null, "max_rate_bpm": number|null, "note": string|null}] (only episodes since the last transmission; empty list if none),
+  "therapies_delivered": number|null (ATP or shocks, ICD only),
+  "r_wave_sensing": ${loop ? '"good"|"oversensing"|"undersensing"|null' : "null"},
+  "device_alerts": [string] (alerts the device or portal raised; empty list if none),
+  "comment": string (one plain sentence on anything abnormal, or "" if nothing is),
+  "evidence": {"<field path>": "<short quote or location where you read it>"} (for battery, every lead value and each episode type),
+  "unreadable": [string]
+}${loop ? "\nA loop recorder has no leads: use an empty leads list." : ""}
+${text ? "\nTranscribed or pasted transmission text:\n<<<\n" + text.slice(0, 20000) + "\n>>>" : ""}`;
+}
+
+let samplePromise = null;
+async function getSample() {
+  if (!samplePromise) samplePromise = window.claude?.use ? window.claude.use("sample") : Promise.resolve(null);
+  return samplePromise;
+}
+
+$("read").onclick = async () => {
+  const text = $("pasted").value.trim();
+  if (!shots.length && !text) { status("Add a screenshot, a PDF or pasted text first.", true); return; }
+  const sample = await getSample();
+  if (!sample) { status("Reading needs Claude. Open this page on claude.ai while signed in.", true); return; }
+  let images = [];
+  if (shots.length) {
+    const lim = await sample.limits().catch(() => null);
+    if (!lim?.images) { status("This view cannot send images to Claude. Paste the text instead.", true); return; }
+    images = await Promise.all(shots.slice(0, lim.images.maxCount).map((s) => new Promise((r) => s.canvas.toBlob(r, "image/png"))));
+    if (shots.length > lim.images.maxCount) status(`Only the first ${lim.images.maxCount} images will be read.`);
+  }
+  ctl = new AbortController();
+  $("read").disabled = true; $("stop").hidden = false;
+  status("Reading… this usually takes 20–60 seconds.");
+  try {
+    const out = await sample.json(buildPrompt(text), { images: images.length ? images : undefined, signal: ctl.signal, cache: false });
+    if (!out || typeof out !== "object" || Array.isArray(out)) throw { code: "invalid_json" };
+    out.leads = Array.isArray(out.leads) ? out.leads : [];
+    out.episodes = Array.isArray(out.episodes) ? out.episodes : [];
+    out.device_alerts = Array.isArray(out.device_alerts) ? out.device_alerts : [];
+    out.unreadable = Array.isArray(out.unreadable) ? out.unreadable : [];
+    data = out; isExample = false;
+    if (out.device?.kind === "loop" && kind !== "loop") setKind("loop");
+    else if (out.device?.kind && out.device.kind !== "loop" && out.device.kind !== "unknown" && kind === "loop") setKind("remote");
+    else refresh();
+    status("Read. Check the flags and the report, then copy.");
+  } catch (e) {
+    const msg = {
+      cancelled: "Stopped.", not_granted: "Claude access was not allowed for this page.", rate_limited: "Too many requests just now. Try again in a minute.",
+      image_rejected: "One of the images could not be used. Try a PNG or JPEG.", invalid_json: "The answer could not be read as values. Try again, or crop to the data pages.",
+      refused: "Claude declined this input. Check that the images are of a device transmission.", session_expired: "Sign in to claude.ai again.",
+      prompt_too_large: "Too much text. Paste only the transmission summary.",
+    }[e?.code] || "Something went wrong reaching Claude. Try again.";
+    status(msg, e?.code !== "cancelled");
+  } finally { $("read").disabled = false; $("stop").hidden = true; ctl = null; }
+};
+$("stop").onclick = () => ctl?.abort();
+
+/* ---------- Start ---------- */
+renderThr();
+kind = store.get("rtr.kind", "remote") === "loop" ? "loop" : "remote";
+$("kind-remote").setAttribute("aria-pressed", kind === "remote");
+$("kind-loop").setAttribute("aria-pressed", kind === "loop");
+if (kind === "remote") { data = EXAMPLE; isExample = true; }
+refresh();
+})();
+</script>
+
+</body></html>
