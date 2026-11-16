@@ -4,12 +4,12 @@
 "use strict";
 
 var SITES = ["LMH", "JPOCSC", "SMH", "ERH", "DH", "PAH", "RMH", "ARH"];
-var DEFAULTS = { impLow: 200, impHigh: 1000, impChangePct: 20, pMin: 1.5, rMin: 5, thrMax: 1.5, thrDelta: 0.25, vpMax: 40, burdenWarn: 1, batteryWarn: 1 };
+var DEFAULTS = { impLow: 200, impHigh: 1000, impChangePct: 20, pMin: 1.0, pIgnoreBurden: 50, rMin: 5, thrMax: 1.5, thrDelta: 0.25, burdenWarn: 20, batteryWarn: 1 };
 var THR_LABELS = [
   ["impLow", "Pacing lead impedance low (Ω)"], ["impHigh", "Pacing lead impedance high (Ω)"],
   ["impChangePct", "Impedance change since last check (%)"], ["pMin", "P wave below (mV)"], ["rMin", "R wave below (mV)"],
-  ["thrMax", "Capture threshold above (V)"], ["thrDelta", "…unless within (V) of last check"], ["vpMax", "Ventricular pacing above (%)"],
-  ["burdenWarn", "AT/AF burden at or above (%)"], ["batteryWarn", "Battery at or below (years)"]
+  ["thrMax", "Capture threshold above (V)"], ["thrDelta", "…unless within (V) of last check"],
+  ["pIgnoreBurden", "Ignore low P wave when AT/AF burden above (%)"], ["burdenWarn", "AT/AF burden above (%)"], ["batteryWarn", "Battery at or below (years)"]
 ];
 
 /* ---------------- Parser ---------------- */
@@ -179,7 +179,6 @@ function fmtDur(sec) {
 }
 
 /* ---------------- Rules ---------------- */
-var LEVEL = { VT: "critical", VF: "critical", NSVT: "warn", SVT: "warn", AHR: "warn", AF48: "warn" };
 
 function evaluate(d, T) {
   var f = [];
@@ -198,7 +197,8 @@ function evaluate(d, T) {
     }
     var a = l.amplitude_mv;
     if (a != null && l.amplitude_op !== ">") {
-      if (ch === "RA" && a < T.pMin) add("warn", "P wave " + a + " mV", "< " + T.pMin + " mV", "sense");
+      var inAF = d.device.mode === "DDIR" || (d.atrial_burden_percent != null && d.atrial_burden_op !== "<" && d.atrial_burden_percent > T.pIgnoreBurden);
+      if (ch === "RA" && a < T.pMin && !inAF) add("warn", "P wave " + a + " mV", "< " + T.pMin + " mV (not DDIR, burden ≤ " + T.pIgnoreBurden + "%)", "sense");
       if ((ch === "RV" || ch === "LV") && a < T.rMin) add("warn", ch + " R wave " + a + " mV", "< " + T.rMin + " mV", "sense");
     }
     var tv = l.threshold_v, tp = l.previous_threshold_v;
@@ -206,15 +206,9 @@ function evaluate(d, T) {
       add("warn", ch + " threshold " + tv + " V @ " + l.threshold_pw_ms + " ms" + (tp != null ? " (last check " + tp + " V)" : ""),
         "> " + T.thrMax + " V and not within " + T.thrDelta + " V of last check", "sense");
   });
-  var vp = (d.pacing_percent || {}).ventricular;
-  if (vp != null && vp > T.vpMax) add("warn", "Ventricular pacing " + vp + "%", "> " + T.vpMax + "%", "vp");
   if (!d.site) add("warn", "No clinic in search tags", "Expected one of " + SITES.join(", ") + (d.tags.length ? "; tags: " + d.tags.join(" ") : ""), "site");
-  if (d.atrial_burden_percent != null && d.atrial_burden_op !== "<" && d.atrial_burden_percent >= T.burdenWarn) add("warn", "AT/AF burden " + d.atrial_burden_op + d.atrial_burden_percent + "%", "≥ " + T.burdenWarn + "%", "burden");
-  (d.episodes || []).forEach(function (e) { add(LEVEL[e.type] || "warn", e.count + " × " + e.label, "Since last reset" + (d.since_reset ? " (" + d.since_reset + ")" : ""), "ep"); });
-  if (d.therapies_delivered) add("critical", d.therapies_delivered + " therapies delivered", "Any delivered therapy", "ep");
-  (d.device_alerts || []).forEach(function (s) { add("warn", "Alert: " + s, "LATITUDE alert", "alert"); });
+  if (d.atrial_burden_percent != null && d.atrial_burden_op !== "<" && d.atrial_burden_percent > T.burdenWarn) add("warn", "AT/AF burden " + d.atrial_burden_op + d.atrial_burden_percent + "%", "> " + T.burdenWarn + "%", "burden");
   (d.device_notes || []).forEach(function (s) { add("warn", s, "Device message", "note"); });
-  if (d.advisory) add("info", "Advisory patient (search tag)", "Tags: " + d.tags.join(" "), "tag");
   var o = { critical: 0, warn: 1, info: 2 };
   return f.sort(function (x, y) { return o[x.level] - o[y.level]; });
 }
@@ -222,21 +216,35 @@ function evaluate(d, T) {
 /* ---------------- Template (the author's wording) ---------------- */
 var REASON_TXT = { scheduled: "scheduled transmission.", amplitude_oor: "intrinsic amplitude out of range.", threshold_suspended: "atrial automatic threshold suspended.",
   error_1003: "ERROR CODE 1003.", vt: "VT episodes.", atrial_burden: "atrial burden." };
+// Known LATITUDE alerts use the template's wording; any other alert is quoted as written.
+function reasonText(d) {
+  var seen = {}, out = [];
+  (d.device_alerts || []).forEach(function (a) {
+    var t = /1003/.test(a) ? "ERROR CODE 1003." : /threshold.*suspend/i.test(a) ? "atrial automatic threshold suspended."
+      : /intrinsic amplitude/i.test(a) ? "intrinsic amplitude out of range." : /(V-?Tachy|\bVT\b|ventricular tachy)/i.test(a) ? "VT episodes."
+      : /(AT\/AF|atrial (burden|arrhythmia))/i.test(a) ? "atrial burden." : a.replace(/\.?\s*$/, ".").replace(/^[A-Z](?=[a-z])/, function (c) { return c.toLowerCase(); });
+    if (!seen[t]) { seen[t] = 1; out.push(t); }
+  });
+  return out.length ? out.join(" ") : null;
+}
 var ACTIONS = ["No actions taken", "Site notified by email, report routed to working group", "Cardiologist notified, report routed and Meditech ordered"];
 
 function template(d, flags, T) {
   var inp = function (k, ph, w) { return '<input type="text" class="fill-input ' + (w || "w-long") + '" data-k="' + k + '" placeholder="' + ph + '">'; };
   var val = function (v, k, ph) { return v != null && v !== "" ? '<span class="prefilled">' + esc(v) + "</span>" : inp(k, ph, "w-short"); };
-  var pl = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
+  var pl = function (n, w, many) { return n + " " + (n === 1 ? w : many || w + "s"); };
   var eps = d.episodes || [];
   var by = function (types) { return eps.filter(function (e) { return types.indexOf(e.type) >= 0; }).reduce(function (s, e) { return s + e.count; }, 0); };
-  var out = ["Transmission received due to " + esc(REASON_TXT[d.reason] || "scheduled transmission.")];
+  var out = ["Transmission received due to " + (reasonText(d) ? esc(reasonText(d)) :
+    '<select class="report-select" data-k="reason">' + ["scheduled transmission.", "patient initiation.", "patient initiation, this is the first transmission"]
+      .map(function (r) { return '<option value="' + r + '">' + r + "</option>"; }).join("") + "</select>")];
   var ep = [];
   [["VHR", ["VT", "VF"]], ["NS-VT", ["NSVT"]], ["SVT", ["SVT"]]].forEach(function (x) {
     var n = by(x[1]); if (n) ep.push(pl(n, "episode") + " of " + x[0] + " noted, " + inp("det-" + x[0], "details from the EGM"));
   });
   var ahr = by(["AHR"]);
   if (ahr) ep.push(pl(ahr, "episode") + " of AHR noted, longest episode lasting " + val(d.ahr_longest, "ahr-longest", "duration"));
+  if (d.therapies_delivered) ep.push(pl(d.therapies_delivered, "therapy", "therapies") + " delivered, " + inp("det-therapy", "details from the EGM"));
   var af48 = by(["AF48"]);
   if (af48) ep.push(pl(af48, "atrial episode") + " longer than 48 hours noted, " + inp("det-af48", "details from the EGM"));
   out = out.concat(ep.length ? ep : ["No high rate episodes were noted."]);
@@ -247,7 +255,7 @@ function template(d, flags, T) {
   out.push(sen ? '<span class="flagged">Sensing/capture: ' + esc(sen) + "</span>" : "Sensing and capture within range");
   out.push("Estimated battery longevity is " + val(d.battery.years, "batt", "#") + " years");
   out.push("Next appointment with " + val(d.site, "site", "clinic"));
-  var extra = (d.therapies_delivered ? [d.therapies_delivered + " therapies delivered."] : []).concat(d.device_notes || []);
+  var extra = d.device_notes || [];
   if (extra.length) out.push(esc(extra.join(" ")));
   out.push('<select class="report-select" data-k="action">' + ACTIONS.map(function (a) { return '<option value="' + a + '">' + a + "</option>"; }).join("") + "</select>");
   return out.join("<br>");

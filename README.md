@@ -21,20 +21,26 @@ Patient name, device model and serial, search tags (clinic from the tag: LMH, JP
 threshold, battery time to explant, AT/AF %, AT/AF events, VT/SVT/NSVT/atrial > 48 h counts, percent paced,
 mode, and device messages such as "disabled by the Signal Artifact Monitor".
 
-## Rules (defaults, editable)
+## Alerts (defaults; numbers editable on the page)
 
-| Rule | Default |
+| Alert | Level |
 | --- | --- |
-| Pacing lead impedance | < 200 or > 1000 Ω (critical) |
-| Impedance change since last check (in-office) | > 20%, up or down |
-| P wave / R wave | < 1.5 mV / < 5 mV |
-| Capture threshold | > 1.5 V, unless within 0.25 V of the last check |
-| Ventricular pacing | > 40% |
-| AT/AF burden | ≥ 1% |
-| Battery | ≤ 1 year (critical at explant indicator) |
-| Episodes | VT/VF and therapies critical; NSVT, SVT, AT/AF events, atrial > 48 h review |
+| Pacing lead impedance < 200 or > 1000 Ω | Critical |
+| Impedance change > 20% (up or down) since last check (in-office) | Review |
+| Capture threshold > 1.5 V, unless within 0.25 V of last check | Review |
+| P wave < 1.0 mV, ignored in DDIR or with AT/AF burden > 50% | Review |
+| R wave < 5 mV | Review |
+| Shock lead impedance < 20 or > 150 Ω | Critical |
+| Battery ≤ 1 year / at replacement indicator / not found | Review / Critical / Note |
+| AT/AF burden > 20% | Review |
+| Device messages (disabled, suspended, safety mode, failed, exceeded, reverted; not MV sensor) | Review |
+| No clinic in search tags | Review |
 
-The report is plain editable text; only the action line is a drop-down (default "No actions taken").
+Episode counts (VT, VF, NSVT, SVT, AT/AF, atrial > 48 h, therapies) are not alerts: each goes on its own line
+in the high-rate section of the report. A LATITUDE "My Alerts" entry becomes the reason for transmission;
+with no alert the reason is a drop-down (scheduled / patient initiation / first transmission).
+
+The report is plain editable text; the action line is a drop-down (default "No actions taken").
 Each arrhythmia type gets its own line with its count and a details box for the EGM read. AHR shows the
 count and the longest episode (AT/AF Overview "Longest" duration, or the total time when there was a single
 event), rounded to the nearest hour, minute or second; otherwise a box is left to fill in. Flagged

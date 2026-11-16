@@ -21,7 +21,10 @@ eq(a.atrial_burden_percent, null, "burden N/R");
 eq(a.episodes, [], "no episodes");
 eq(a.since_reset, "29 Sep 2026", "reset");
 const fa = P.evaluate(a, P.DEFAULTS).map((f) => f.title);
-eq(fa, ["P wave 0.9 mV", "Ventricular pacing 100%", "Alert: Atrial intrinsic amplitude out of range.", "Advisory patient (search tag)"], "alpha flags");
+eq(fa, [], "alpha: P wave 0.9 mV ignored in DDIR; alert is the reason, not a flag");
+eq(P.evaluate(Object.assign({}, a, { device: { mode: "DDDR" } }), P.DEFAULTS).map((f) => f.title), ["P wave 0.9 mV"], "P wave < 1.0 flagged in DDDR");
+eq(P.evaluate(Object.assign({}, a, { device: { mode: "DDDR" }, atrial_burden_percent: 80, atrial_burden_op: "" }), P.DEFAULTS).map((f) => f.title),
+  ["AT/AF burden 80%"], "P wave ignored when burden > 50%");
 
 const b = load("bravo.txt");
 eq(b.device.serial, "900003", "serial on next line");
@@ -35,8 +38,7 @@ eq(b.episodes.map((e) => [e.type, e.count]), [["NSVT", 1], ["SVT", 2], ["AHR", 3
 eq(b.device_notes, [], "MV sensor message dropped");
 eq(b.reason, "scheduled", "reason default");
 const fb = P.evaluate(b, P.DEFAULTS).map((f) => f.level + ": " + f.title);
-eq(fb, ["warn: RV impedance rose 362 → 569 Ω (57%)", "warn: RV R wave 3.7 mV", "warn: AT/AF burden 4.5%", "warn: 1 × Nonsustained V episodes",
-  "warn: 2 × SVT episodes (V<=A)", "warn: 3 × AT/AF events", "info: Advisory patient (search tag)"], "bravo flags");
+eq(fb, ["warn: RV impedance rose 362 → 569 Ω (57%)", "warn: RV R wave 3.7 mV"], "bravo flags: burden 4.5% under 20%, episodes not flagged");
 eq(b.ahr_longest, null, "3 AHR events: longest unknown from the Summary");
 
 const c = load("charlie.txt");
@@ -45,8 +47,8 @@ eq(c.atrial_total_seconds, 125.4 * 60, "AT/AF overview total, not the Health dai
 eq(c.ahr_longest, "2 hours", "single AHR event: longest = total, rounded");
 eq(c.battery.years, 0.8, "months to years");
 const fc = P.evaluate(c, P.DEFAULTS).map((f) => f.level + ": " + f.title);
-eq(fc, ["critical: RV impedance 1100 Ω", "critical: 2 × VT episodes (V>A)", "warn: Battery 0.8 years to explant", "warn: RA impedance fell 400 → 300 Ω (25%)",
-  "warn: RA threshold 1.8 V @ 0.4 ms (last check 1 V)", "warn: 1 × AT/AF events"], "charlie flags: RV 2.0 V within 0.25 V of 1.9 V is not flagged");
+eq(fc, ["critical: RV impedance 1100 Ω", "warn: Battery 0.8 years to explant", "warn: RA impedance fell 400 → 300 Ω (25%)",
+  "warn: RA threshold 1.8 V @ 0.4 ms (last check 1 V)"], "charlie flags: RV 2.0 V within 0.25 V of 1.9 V is not flagged");
 
 // Durations round to the nearest hour, minute or second
 eq([P.fmtDur(42), P.fmtDur(59.4), P.fmtDur(90), P.fmtDur(3569), P.fmtDur(5400), P.fmtDur(7600)],
@@ -61,5 +63,5 @@ eq(dl.site, null, "Search Tags: None");
 eq([dl.atrial_burden_op, dl.atrial_burden_percent], ["<", 1], "burden <1 %");
 eq(dl.ahr_longest, "7 seconds", "longest from the AT/AF overview");
 const fd = P.evaluate(dl, P.DEFAULTS).map((f) => f.level + ": " + f.title);
-eq(fd, ["warn: Ventricular pacing 100%", "warn: No clinic in search tags", "warn: 2 × AT/AF events"], "delta flags (burden <1% not flagged)");
+eq(fd, ["warn: No clinic in search tags"], "delta flags");
 console.log("ok", n, "checks");
