@@ -36,8 +36,8 @@ mode, and device messages such as "disabled by the Signal Artifact Monitor".
 | Device messages (disabled, suspended, safety mode, failed, exceeded, reverted; not MV sensor) | Review |
 | No clinic in search tags | Review |
 
-Episode counts (VT, VF, NSVT, SVT, AT/AF, atrial > 48 h, therapies) are not alerts: each goes on its own line
-in the high-rate section of the report. A LATITUDE "My Alerts" entry becomes the reason for transmission;
+Episode counts are not alerts. The high-rate section has one line each for VHR (VT + VF + nonsustained V), SVT,
+AHR (with the longest episode) and therapies; atrial episodes > 48 h are not reported. A LATITUDE "My Alerts" entry becomes the reason for transmission;
 with no alert the reason is a drop-down (scheduled / patient initiation / first transmission).
 
 The report is plain editable text; the action line is a drop-down (default "No actions taken").

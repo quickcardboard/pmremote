@@ -271,14 +271,14 @@ function template(d, flags, T) {
     '<select class="report-select" data-k="reason">' + ["scheduled transmission.", "patient initiation.", "patient initiation, this is the first transmission"]
       .map(function (r) { return '<option value="' + r + '">' + r + "</option>"; }).join("") + "</select>")];
   var ep = [];
-  [["VHR", ["VT", "VF"]], ["NS-VT", ["NSVT"]], ["SVT", ["SVT"]]].forEach(function (x) {
-    var n = by(x[1]); if (n) ep.push('<span class="nw">' + pl(n, "episode") + " of " + x[0] + " noted, " + inp("det-" + x[0], "details from the EGM") + "</span>");
-  });
+  var row = function (n, what, k) { return '<span class="nw">' + n + " " + what + (n === 1 ? " episode" : " episodes") + " noted, " + inp("det-" + k, "details from the EGM") + "</span>"; };
+  var vhr = by(["VT", "VF", "NSVT"]);              // VT, VF and nonsustained V together
+  if (vhr) ep.push(row(vhr, "VHR", "vhr"));
+  var svt = by(["SVT"]);
+  if (svt) ep.push('<span class="nw">' + pl(svt, "episode") + " of SVT noted, " + inp("det-svt", "details from the EGM") + "</span>");
   var ahr = by(["AHR"]);
-  if (ahr) ep.push(pl(ahr, "episode") + " of AHR noted, longest episode lasting " + val(d.ahr_longest, "ahr-longest", "duration"));
+  if (ahr) ep.push(ahr + " AHR " + (ahr === 1 ? "episode" : "episodes") + " noted, longest episode lasting " + val(d.ahr_longest, "ahr-longest", "duration"));
   if (d.therapies_delivered) ep.push('<span class="nw">' + pl(d.therapies_delivered, "therapy", "therapies") + " delivered, " + inp("det-therapy", "details from the EGM") + "</span>");
-  var af48 = by(["AF48"]);
-  if (af48) ep.push('<span class="nw">' + pl(af48, "atrial episode") + " longer than 48 hours noted, " + inp("det-af48", "details from the EGM") + "</span>");
   out = out.concat(ep.length ? ep : ["No high rate episodes were noted."]);
   // Burden N/R: DDIR says so on the line; VVI(R) has no atrial lead, so the line is left out.
   var mode = d.device.mode || "";
