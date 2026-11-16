@@ -275,7 +275,7 @@ function template(d, flags, T) {
   var vhr = by(["VT", "VF", "NSVT"]);              // VT, VF and nonsustained V together
   if (vhr) ep.push(row(vhr, "VHR", "vhr"));
   var svt = by(["SVT"]);
-  if (svt) ep.push('<span class="nw">' + pl(svt, "episode") + " of SVT noted, " + inp("det-svt", "details from the EGM") + "</span>");
+  if (svt) ep.push(row(svt, "SVT", "svt"));
   var ahr = by(["AHR"]);
   if (ahr) ep.push(ahr + " AHR " + (ahr === 1 ? "episode" : "episodes") + " noted, longest episode lasting " + val(d.ahr_longest, "ahr-longest", "duration"));
   if (d.therapies_delivered) ep.push('<span class="nw">' + pl(d.therapies_delivered, "therapy", "therapies") + " delivered, " + inp("det-therapy", "details from the EGM") + "</span>");
