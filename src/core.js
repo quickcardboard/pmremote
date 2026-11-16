@@ -87,7 +87,8 @@ function parseLatitude(text) {
     if (CH[low]) { chamber = CH[low]; continue; }
     var lab = null;
     for (var q = 0; q < LAB.length; q++) if (low.indexOf(LAB[q][0]) === 0) { lab = LAB[q]; break; }
-    if (!lab || (!chamber && lab[1] !== "shock")) continue;
+    if (!lab) continue;
+    if (!chamber && lab[1] !== "shock") chamber = singleChamber(d.device.mode) || "RV";
     var buf = line.slice(lab[0].length), j = k + 1;
     while (j < L.length && isVal(L[j])) { buf += " " + L[j]; j++; }
     k = j - 1;
@@ -114,7 +115,11 @@ function parseLatitude(text) {
 
   // Battery
   var bm = J.match(/time to explant:?\s*([<>]?\s*\d+(?:\.\d+)?)\s*(years?|months?)/i);
-  if (bm) d.battery.years = Math.round(num(bm[1]) / (/^month/i.test(bm[2]) ? 12 : 1) * 10) / 10;
+  if (bm) {
+    var bmo = /^month/i.test(bm[2]);
+    d.battery.years = Math.round(num(bm[1]) / (bmo ? 12 : 1) * 10) / 10;
+    d.battery.text = num(bm[1]) + (bmo ? " months" : " years");   // as LATITUDE gives it
+  }
   if (/time to explant:?\s*(Explant|ERI|EOL)/i.test(J) || /\b(Explant Indicator|End of Life|EOL reached)\b/i.test(J)) d.battery.status = "ERI";
 
   // Percent paced
@@ -126,6 +131,10 @@ function parseLatitude(text) {
     if (pv) d.pacing_percent.ventricular = +pv[1];
     var plv = sub.match(/(?:LV|Left Ventricular)\s+[<>]?\s*(\d+(?:\.\d+)?)\s*%/);
     if (plv) d.pacing_percent.lv = +plv[1];
+    if (!pa && !pv) {
+      var p1 = sub.match(/Percent Paced\s+[<>]?\s*(\d+(?:\.\d+)?)\s*%/i), sc = singleChamber(d.device.mode);
+      if (p1) d.pacing_percent[sc === "RA" ? "atrial" : "ventricular"] = +p1[1];
+    }
   }
 
   // AT/AF burden and event counts
@@ -136,7 +145,8 @@ function parseLatitude(text) {
   var ep = [
     ["VT", cnt(/(?<![A-Za-z])VT Episodes\s*(?:\([^)]*\))?\s+(\d+|N\/R)/i), "VT episodes (V>A)"],
     ["VF", cnt(/(?<![A-Za-z])VF Episodes\s*(?:\([^)]*\))?\s+(\d+|N\/R)/i), "VF episodes"],
-    ["NSVT", cnt(/Nonsustained\s*V\s*Episodes\s+(\d+|N\/R)/i), "Nonsustained V episodes"],
+    ["VT", cnt(/(?<![A-Za-z])Tachy Episodes\s+(\d+|N\/R)/i), "Tachy episodes"],
+    ["NSVT", cnt(/Nonsustained\s*V?\s*Episodes\s+(\d+|N\/R)/i), "Nonsustained V episodes"],
     ["SVT", cnt(/(?<![A-Za-z])SVT Episodes\s*(?:\([^)]*\))?\s+(\d+|N\/R)/i), "SVT episodes (V<=A)"],
     ["AHR", cnt(/AT\/AF Events\s+(\d+|N\/R)/i), "AT/AF events"],
     ["AF48", cnt(/Atrial Episodes\s*>\s*48\s*hr?\s+(\d+|N\/R)/i), "Atrial episodes > 48 h"]
@@ -197,13 +207,13 @@ function durSeconds(text, unit) {
   if (/^s/.test(uh)) return n;
   return null;
 }
-// Round to the nearest half hour, minute or second, whichever applies.
+// Round to the nearest second, half minute or half hour, whichever applies.
 function fmtDur(sec) {
   if (sec == null || !isFinite(sec) || sec <= 0) return null;
   var pl = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
   if (sec < 59.5) return pl(Math.max(1, Math.round(sec)), "second");
-  var m = Math.round(sec / 60);
-  if (m < 60) return pl(m, "minute");
+  var m = Math.round(sec / 30) / 2;
+  if (m < 60) return m + " minute" + (m === 1 ? "" : "s");
   var h = Math.round(sec / 1800) / 2;
   return h + " hour" + (h === 1 ? "" : "s");
 }
@@ -223,6 +233,11 @@ function readCells(text, kind) {
   return out;
 }
 
+// Single-chamber devices have no Atrial/Ventricular heading: AAI(R) is an atrial lead, VVI(R) a ventricular one.
+function singleChamber(mode) {
+  return /^A(AI|OO|AT)/.test(mode || "") ? "RA" : /^V(VI|OO|VT)/.test(mode || "") ? "RV" : null;
+}
+
 /* ---------------- Rules ---------------- */
 
 function evaluate(d, T) {
@@ -230,7 +245,7 @@ function evaluate(d, T) {
   var add = function (level, title, rule, tag) { f.push({ level: level, title: title, rule: rule, tag: tag }); };
   var b = d.battery || {};
   if (b.status) add("critical", "Battery " + b.status, "Battery at replacement indicator", "batt");
-  else if (b.years != null && b.years <= T.batteryWarn) add("warn", "Battery " + b.years + " years to explant", "≤ " + T.batteryWarn + " years", "batt");
+  else if (b.years != null && b.years <= T.batteryWarn) add("warn", "Battery " + (b.text || b.years + " years") + " to explant", "≤ " + T.batteryWarn + " years", "batt");
   else if (b.years == null) add("info", "Battery longevity not found", "Check by hand", "batt");
   (d.leads || []).forEach(function (l) {
     var ch = l.chamber, hv = ch === "HV", lo = hv ? 20 : T.impLow, hi = hv ? 150 : T.impHigh;
@@ -298,12 +313,13 @@ function template(d, flags, T) {
   var mode = d.device.mode || "";
   if (d.atrial_burden_percent != null) out.push("Atrial burden: " + val((d.atrial_burden_op || "") + d.atrial_burden_percent) + "%");
   else if (mode === "DDIR") out.push("Atrial burden: DDIR");
+  else if (/^DDDR?$/.test(mode)) out.push("Atrial burden: " + val("0") + "%");
   else if (!/^VVIR?$/.test(mode)) out.push("Atrial burden: " + val(null, "burden", "%") + "%");
   var line = function (tag) { return flags.filter(function (f) { return f.tag === tag && f.level !== "info"; }).map(function (f) { return f.title; }).join("; "); };
   var imp = line("imp"), sen = line("sense");
   out.push(imp ? '<span class="flagged">Lead impedance: ' + esc(imp) + "</span>" : "Lead impedance stable");
   out.push(sen ? '<span class="flagged">Sensing/capture: ' + esc(sen) + "</span>" : "Sensing and capture within range");
-  out.push("Estimated battery longevity is " + val(d.battery.years, "batt", "#") + " years");
+  out.push("Estimated battery longevity is " + (d.battery.text ? val(d.battery.text) : val(null, "batt", "#") + " years"));
   out.push("Next appointment with " + val(d.site, "site", "clinic"));
   var extra = d.device_notes || [];
   if (extra.length) out.push(esc(extra.join(" ")));

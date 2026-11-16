@@ -45,14 +45,14 @@ const c = load("charlie.txt");
 eq(c.site, "RMH", "site");
 eq(c.atrial_total_seconds, 125.4 * 60, "AT/AF overview total, not the Health daily value");
 eq(c.ahr_longest, "2 hours", "single AHR event: longest = total, rounded");
-eq(c.battery.years, 0.8, "months to years");
+eq([c.battery.years, c.battery.text], [0.8, "10 months"], "months kept as months for the report");
 const fc = P.evaluate(c, P.DEFAULTS).map((f) => f.level + ": " + f.title);
-eq(fc, ["critical: RV impedance 1100 Ω", "warn: Battery 0.8 years to explant", "warn: RA impedance fell 400 → 300 Ω (25%)",
+eq(fc, ["critical: RV impedance 1100 Ω", "warn: Battery 10 months to explant", "warn: RA impedance fell 400 → 300 Ω (25%)",
   "warn: RA threshold 1.8 V @ 0.4 ms (last check 1 V)"], "charlie flags: RV 2.0 V within 0.25 V of 1.9 V is not flagged");
 
 // Durations round to the nearest hour, minute or second
 eq([P.fmtDur(42), P.fmtDur(59.4), P.fmtDur(90), P.fmtDur(3569), P.fmtDur(5400), P.fmtDur(7600), P.fmtDur(9230), P.fmtDur(3700)],
-  ["42 seconds", "59 seconds", "2 minutes", "59 minutes", "1.5 hours", "2 hours", "2.5 hours", "1 hour"], "fmtDur");
+  ["42 seconds", "59 seconds", "1.5 minutes", "59.5 minutes", "1.5 hours", "2 hours", "2.5 hours", "1 hour"], "fmtDur");
 eq([P.durSeconds("01:02:03"), P.durSeconds("2 hr 5 min"), P.durSeconds("12", "min"), P.durSeconds("N/R")], [3723, 7500, 720, null], "durSeconds");
 
 const junk = P.parseLatitude("hello world");
@@ -87,6 +87,12 @@ const ht = load("hotel.txt");
 eq(ht.ahr_longest, ">48 hours", "Longest '>48 Hours' kept; Fastest 20:08:45 not used");
 eq(ht.device_alerts, ["Atrial Arrhythmia Burden of at least 24.0 hours in a 24 hour period between 14 Nov 2026 01:21 and 15 Nov 2026 01:21."], "wrapped alert joined");
 eq(ht.reason, "atrial_burden", "reason");
+const ind = load("india.txt");
+eq(ind.leads.map((l) => [l.chamber, l.daily.amp.op + l.daily.amp.v, l.daily.imp.v, l.office.imp.v, l.daily.thr.v]), [["RV", ">25", 902, 925, 0.7]], "VVIR: unlabelled lead is RV");
+eq(ind.pacing_percent, { ventricular: 91 }, "unlabelled percent paced is ventricular in VVIR");
+eq(ind.episodes.map((e) => [e.type, e.count]), [["NSVT", 1]], "Nonsustained Episodes counted");
+eq(ind.site, "DH", "site");
+eq([P.fmtDur(80), P.fmtDur(75), P.fmtDur(60)], ["1.5 minutes", "1.5 minutes", "1 minute"], "half minutes");
 // Alerts come from the daily value; N/R daily = no alert; low sensing within 20% of in-office = no alert
 const lead = (daily, office) => ({ chamber: "RV", daily: { amp: daily }, office: { amp: office } });
 const sense = (dl, of) => {

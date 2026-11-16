@@ -1,0 +1,26 @@
+Patient ID: DH900061
+Patient: TESTPATIENT, INDIA	Patient Group: JPOCSC Cardiac Device Clinic (Primary)
+Device: L310 ACCOLADE	Search Tags: DH ADVISORY PATIENT
+MRI/900061
+Date of Birth: 06 Jun 1940	Monitoring Status: Monitored
+Leads (View detail)
+Most Recent Daily Measurement (14 Nov 2026)	Most Recent In-Office Measurement (12 Aug 2026)
+Intrinsic Amplitude	>25.0 mV	>25.0 mV
+Pace Impedance	902 Ω	925 Ω
+Pace Threshold	0.7 V @ 0.4 ms	0.7 V @ 0.4 ms
+Battery
+Approximate time to explant: 8.5 years from 16 Nov 2026
+Health (View detail)
+Events (View detail)
+Since Last Reset
+12 Aug 2026
+Event Counts
+Tachy Episodes	0
+Nonsustained Episodes	1
+MRI Protection Mode	0
+Percent Paced
+91 %
+Settings Summary (Generate report)
+Settings
+Mode	VVIR
+LRL - MSR	60 - 130 min-1
