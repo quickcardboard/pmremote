@@ -72,9 +72,9 @@ details summary { cursor: pointer; font-weight: 600 }
   var CORE_SRC = /*CORE_JSON*/"";
   var EXAMPLE = /*EXAMPLE_JSON*/"";
   var P = window.PMRemote, $ = function (id) { return document.getElementById(id); };
-  var get = function () { try { return Object.assign({}, P.DEFAULTS, JSON.parse(localStorage.getItem("pmr.thr") || "{}")); } catch (e) { return Object.assign({}, P.DEFAULTS); } };
+  var get = function () { try { return Object.assign({}, P.DEFAULTS, JSON.parse(localStorage.getItem("pmr.thr2") || "{}")); } catch (e) { return Object.assign({}, P.DEFAULTS); } };
   var T = get();
-  var save = function () { try { localStorage.setItem("pmr.thr", JSON.stringify(T)); } catch (e) {} };
+  var save = function () { try { localStorage.setItem("pmr.thr2", JSON.stringify(T)); } catch (e) {} };
 
   function bookmarklet() {
     var code = "(function(){" + CORE_SRC + "\nPMRemote.openOverlay(" + JSON.stringify(T) + ");})();";

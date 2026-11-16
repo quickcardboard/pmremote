@@ -25,17 +25,21 @@ mode, and device messages such as "disabled by the Signal Artifact Monitor".
 
 | Rule | Default |
 | --- | --- |
-| Pacing lead impedance | < 200 or > 2000 Ω (critical) |
-| Impedance change vs in-office | > 30% |
+| Pacing lead impedance | < 200 or > 1000 Ω (critical) |
+| Impedance change since last check (in-office) | > 20%, up or down |
 | P wave / R wave | < 1.5 mV / < 5 mV |
-| Capture threshold | > 2.5 V |
+| Capture threshold | > 1.5 V, unless within 0.25 V of the last check |
 | Ventricular pacing | > 40% |
 | AT/AF burden | ≥ 1% |
 | Battery | ≤ 1 year (critical at explant indicator) |
 | Episodes | VT/VF and therapies critical; NSVT, SVT, AT/AF events, atrial > 48 h review |
 
-Flagged impedance or sensing replaces the fixed "Lead impedance stable" / "Sensing and capture within range"
-line, and the action line must be chosen by hand when anything is flagged.
+The report is plain editable text; only the action line is a drop-down (default "No actions taken").
+Each arrhythmia type gets its own line with its count and a details box for the EGM read. AHR shows the
+count and the longest episode, rounded to the nearest hour, minute or second; the Summary page only gives
+that when there was one AT/AF event (total time = longest), otherwise a box is left to fill in. Flagged
+impedance or sensing replaces the fixed "Lead impedance stable" / "Sensing and capture within range" line.
+MV sensor (SAM) messages are ignored.
 
 ## Develop
 

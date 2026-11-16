@@ -1,0 +1,35 @@
+Patient: TESTPATIENT, CHARLIE
+Device: K173 PROPONENT MRI EL/900007
+Search Tags: RMH
+Date of Birth: 03 Mar 1950
+Leads (View detail)
+	Most Recent In-Office Measurement (01 Jun 2026)	Most Recent Daily Measurement (15 Nov 2026)
+Atrial
+Intrinsic Amplitude	2.4 mV	2.2 mV
+Pace Impedance	400 Ω	300 Ω
+Pace Threshold	1.0 V @ 0.4 ms	1.8 V @ 0.4 ms
+Ventricular
+Intrinsic Amplitude	9.0 mV	8.8 mV
+Pace Impedance	980 Ω	1100 Ω
+Pace Threshold	1.9 V @ 0.4 ms	2.0 V @ 0.4 ms
+Battery
+Approximate time to explant: 10 months from 16 Nov 2026
+AT/AF Overview (Generate report)
+	Since Last Reset
+01 Jun 2026
+Atrial Arrhythmia
+AT/AF	0.6 %
+AT/AF Events	1
+Total Time in AT/AF (min)	125.4
+Health (View detail)
+Total Time in AT/AF	3.0 hour(s)
+Event Counts
+VT Episodes (V>A)	2
+SVT Episodes (V<=A)	0
+NonsustainedV Episodes	0
+Atrial Episodes > 48 hr	0
+Percent Paced
+Atrial	40 %
+Ventricular	5 %
+Settings
+Mode	DDDR

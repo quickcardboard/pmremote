@@ -4,11 +4,11 @@
 "use strict";
 
 var SITES = ["JPOCSC", "PAH", "DH", "RMH", "ERH", "LMH"];
-var DEFAULTS = { impLow: 200, impHigh: 2000, impChangePct: 30, pMin: 1.5, rMin: 5, thrMax: 2.5, vpMax: 40, burdenWarn: 1, batteryWarn: 1, site: "JPOCSC" };
+var DEFAULTS = { impLow: 200, impHigh: 1000, impChangePct: 20, pMin: 1.5, rMin: 5, thrMax: 1.5, thrDelta: 0.25, vpMax: 40, burdenWarn: 1, batteryWarn: 1, site: "JPOCSC" };
 var THR_LABELS = [
   ["impLow", "Pacing lead impedance low (Ω)"], ["impHigh", "Pacing lead impedance high (Ω)"],
-  ["impChangePct", "Impedance change vs in-office (%)"], ["pMin", "P wave below (mV)"], ["rMin", "R wave below (mV)"],
-  ["thrMax", "Capture threshold above (V)"], ["vpMax", "Ventricular pacing above (%)"],
+  ["impChangePct", "Impedance change since last check (%)"], ["pMin", "P wave below (mV)"], ["rMin", "R wave below (mV)"],
+  ["thrMax", "Capture threshold above (V)"], ["thrDelta", "…unless within (V) of last check"], ["vpMax", "Ventricular pacing above (%)"],
   ["burdenWarn", "AT/AF burden at or above (%)"], ["batteryWarn", "Battery at or below (years)"]
 ];
 
@@ -84,7 +84,7 @@ function parseLatitude(text) {
     } else if (lab[1] === "thr") {
       var re3 = /(Auto\s*)?(\d+(?:\.\d+)?)\s*V\s*@\s*(\d+(?:\.\d+)?)\s*ms/gi;
       while ((m = re3.exec(clean))) v.push(m);
-      if (v.length) { var t = v[v.length - 1]; ld.threshold_v = +t[2]; ld.threshold_pw_ms = +t[3]; }
+      if (v.length) { var t = v[v.length - 1]; ld.threshold_v = +t[2]; ld.threshold_pw_ms = +t[3]; if (v.length > 1) ld.previous_threshold_v = +v[0][2]; }
     }
   }
   d.leads = order.map(function (c) { return leads[c]; });
@@ -118,13 +118,20 @@ function parseLatitude(text) {
     ["AF48", cnt(/Atrial Episodes\s*>\s*48\s*hr?\s+(\d+|N\/R)/i), "Atrial episodes > 48 h"]
   ];
   ep.forEach(function (e) { if (e[1]) d.episodes.push({ type: e[0], count: e[1], label: e[2] }); });
+  // Longest AHR: LATITUDE's Summary shows only the total time in AT/AF since reset, which equals the
+  // longest episode when there was exactly one.
+  var ov = J.search(/AT\/AF Overview/i);
+  var tt = (ov >= 0 ? J.slice(ov, ov + 600) : "").match(/Total Time in AT\/AF(?:\s*\(([^)]*)\))?\s+([^\n]+)/i);
+  d.atrial_total_seconds = tt ? durSeconds(tt[2], tt[1]) : null;
+  var ahrN = (d.episodes.filter(function (e) { return e.type === "AHR"; })[0] || {}).count;
+  d.ahr_longest = ahrN === 1 && d.atrial_total_seconds ? fmtDur(d.atrial_total_seconds) : null;
   var shocks = cnt(/Shocks?(?: Delivered)?\s+(\d+)/i), atp = cnt(/ATP(?: Delivered| Therapies)?\s+(\d+)/i);
   d.therapies_delivered = (shocks || 0) + (atp || 0) || null;
 
   // Device messages worth reading (safety mode, disabled sensors, suspended tests)
   var seen = {};
   L.forEach(function (s) {
-    if (/(disabled|suspended|safety (mode|core)|failed|failure|exceeded|reverted)/i.test(s) && s.length < 220 && !seen[s] && d.device_alerts.indexOf(s) < 0) { seen[s] = 1; d.device_notes.push(s); }
+    if (/(disabled|suspended|safety (mode|core)|failed|failure|exceeded|reverted)/i.test(s) && !/(MV Sensor|Signal Artifact Monitor)/i.test(s) && s.length < 220 && !seen[s] && d.device_alerts.indexOf(s) < 0) { seen[s] = 1; d.device_notes.push(s); }
   });
 
   // Reason for transmission from the alert text
@@ -133,6 +140,34 @@ function parseLatitude(text) {
     : /(V-?Tachy|VT\b|ventricular tachy)/i.test(at) ? "vt" : /(AT\/AF|atrial (burden|arrhythmia))/i.test(at) ? "atrial_burden" : "scheduled";
   d.recognised = d.leads.length > 0 || d.battery.years != null;
   return d;
+}
+
+// Duration text -> seconds. unit: a hint from the label, e.g. "min".
+function durSeconds(text, unit) {
+  text = String(text || "").trim();
+  if (!/\d/.test(text)) return null;
+  var c = text.match(/^(\d+):(\d{2})(?::(\d{2}))?/);
+  if (c) return c[3] != null ? +c[1] * 3600 + +c[2] * 60 + +c[3] : +c[1] * 60 + +c[2];
+  var total = 0, any = false, re = /(\d+(?:\.\d+)?)\s*(days?|d\b|hours?|hrs?|h\b|minutes?|mins?|m\b|seconds?|secs?|s\b)/gi, m;
+  while ((m = re.exec(text))) {
+    any = true; var u = m[2].toLowerCase()[0];
+    total += +m[1] * (u === "d" ? 86400 : u === "h" ? 3600 : u === "m" ? 60 : 1);
+  }
+  if (any) return total;
+  var n = parseFloat(text), uh = String(unit || "").toLowerCase();
+  if (/^min/.test(uh)) return n * 60;
+  if (/^(h|hr|hour)/.test(uh)) return n * 3600;
+  if (/^s/.test(uh)) return n;
+  return null;
+}
+// Round to the nearest hour, minute or second, whichever applies.
+function fmtDur(sec) {
+  if (sec == null || !isFinite(sec) || sec <= 0) return null;
+  var pl = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
+  if (sec < 59.5) return pl(Math.max(1, Math.round(sec)), "second");
+  var m = Math.round(sec / 60);
+  if (m < 60) return pl(m, "minute");
+  return pl(Math.round(sec / 3600), "hour");
 }
 
 /* ---------------- Rules ---------------- */
@@ -151,14 +186,17 @@ function evaluate(d, T) {
     if (z != null && (z < lo || z > hi)) add("critical", ch + " impedance " + z + " Ω", "Outside " + lo + "–" + hi + " Ω", "imp");
     if (z != null && zp) {
       var pct = Math.round(Math.abs(z - zp) / zp * 100);
-      if (pct > T.impChangePct) add("warn", ch + " impedance " + zp + " → " + z + " Ω (" + pct + "%)", "Change > " + T.impChangePct + "% from in-office", "imp");
+      if (pct > T.impChangePct) add("warn", ch + " impedance " + (z > zp ? "rose" : "fell") + " " + zp + " → " + z + " Ω (" + pct + "%)", "Change > " + T.impChangePct + "% since last check", "imp");
     }
     var a = l.amplitude_mv;
     if (a != null && l.amplitude_op !== ">") {
       if (ch === "RA" && a < T.pMin) add("warn", "P wave " + a + " mV", "< " + T.pMin + " mV", "sense");
       if ((ch === "RV" || ch === "LV") && a < T.rMin) add("warn", ch + " R wave " + a + " mV", "< " + T.rMin + " mV", "sense");
     }
-    if (l.threshold_v != null && !hv && l.threshold_v > T.thrMax) add("warn", ch + " threshold " + l.threshold_v + " V @ " + l.threshold_pw_ms + " ms", "> " + T.thrMax + " V", "sense");
+    var tv = l.threshold_v, tp = l.previous_threshold_v;
+    if (tv != null && !hv && tv > T.thrMax && !(tp != null && Math.abs(tv - tp) <= T.thrDelta + 1e-9))
+      add("warn", ch + " threshold " + tv + " V @ " + l.threshold_pw_ms + " ms" + (tp != null ? " (last check " + tp + " V)" : ""),
+        "> " + T.thrMax + " V and not within " + T.thrDelta + " V of last check", "sense");
   });
   var vp = (d.pacing_percent || {}).ventricular;
   if (vp != null && vp > T.vpMax) add("warn", "Ventricular pacing " + vp + "%", "> " + T.vpMax + "%", "vp");
@@ -172,27 +210,39 @@ function evaluate(d, T) {
   return f.sort(function (x, y) { return o[x.level] - o[y.level]; });
 }
 
-/* ---------------- Templates (the author's wording) ---------------- */
-function opts(list) { return list.map(function (o) { return '<option value="' + o[0] + '">' + o[1] + "</option>"; }).join(""); }
-var REMOTE = function () {
-  return 'Transmission received due to <select class="report-select" data-k="reason">' + opts([
-    ["scheduled transmission.", "Scheduled"], ["patient initiation, this is the first transmission", "First transmission"], ["patient initiation.", "Patient initiation"],
-    ["atrial burden.", "Atrial burden"], ["VT episodes.", "VT"], ["intrinsic amplitude out of range.", "Amplitude OOR"],
-    ["atrial automatic threshold suspended.", "Threshold suspended"], ["ERROR CODE 1003.", "Error code 1003"], ["", "None"]]) + "</select><br>" +
-    '<span data-k="epcount-wrap"><input type="text" class="fill-input w-short" data-k="epcount" placeholder="Count"> </span><select class="report-select" data-k="episodes">' + opts([
-    ["No high rate episodes were noted.", "No episodes"], ["episodes of AHR noted, ", "AHR"], ["episodes of VHR noted, ", "VHR"],
-    ["episodes of NS-VT noted, ", "NS-VT"], ["episodes of SVT noted, ", "SVT"]]) + '</select><span data-k="epdetail-wrap"><input type="text" class="fill-input w-long" data-k="epdetail" placeholder="details"></span><br>' +
-    'Atrial burden: <input type="text" class="fill-input w-short" data-k="burden" value="0">% <br>' +
-    '<span class="autoline" data-k="imp">Lead impedance stable</span> <br>' +
-    '<span class="autoline" data-k="sense">Sensing and capture within range</span> <br>' +
-    'Estimated battery longevity is <input type="text" class="fill-input w-short" data-k="batt" placeholder="# years"> years <br>' +
-    'Next appointment with <select class="report-select" data-k="site">' + opts(SITES.map(function (s) { return [s, s]; })) + "</select><br>" +
-    '<span data-k="comment-wrap"><span class="autoline" data-k="comment"></span><br></span>' +
-    '<select class="report-select" data-k="action">' + opts([["", "Choose action…"], ["No actions taken", "No actions"],
-    ["Site notified by email, report routed to working group", "Site notified"], ["Cardiologist notified, report routed and Meditech ordered", "Cardiologist notified"]]) + "</select>";
-};
-var REASON_OPT = { scheduled: "scheduled transmission.", amplitude_oor: "intrinsic amplitude out of range.", threshold_suspended: "atrial automatic threshold suspended.",
+/* ---------------- Template (the author's wording) ---------------- */
+var REASON_TXT = { scheduled: "scheduled transmission.", amplitude_oor: "intrinsic amplitude out of range.", threshold_suspended: "atrial automatic threshold suspended.",
   error_1003: "ERROR CODE 1003.", vt: "VT episodes.", atrial_burden: "atrial burden." };
+var ACTIONS = ["No actions taken", "Site notified by email, report routed to working group", "Cardiologist notified, report routed and Meditech ordered"];
+
+function template(d, flags, T) {
+  var inp = function (k, ph, w) { return '<input type="text" class="fill-input ' + (w || "w-long") + '" data-k="' + k + '" placeholder="' + ph + '">'; };
+  var val = function (v, k, ph) { return v != null && v !== "" ? '<span class="prefilled">' + esc(v) + "</span>" : inp(k, ph, "w-short"); };
+  var pl = function (n, w) { return n + " " + w + (n === 1 ? "" : "s"); };
+  var eps = d.episodes || [];
+  var by = function (types) { return eps.filter(function (e) { return types.indexOf(e.type) >= 0; }).reduce(function (s, e) { return s + e.count; }, 0); };
+  var out = ["Transmission received due to " + esc(REASON_TXT[d.reason] || "scheduled transmission.")];
+  var ep = [];
+  [["VHR", ["VT", "VF"]], ["NS-VT", ["NSVT"]], ["SVT", ["SVT"]]].forEach(function (x) {
+    var n = by(x[1]); if (n) ep.push(pl(n, "episode") + " of " + x[0] + " noted, " + inp("det-" + x[0], "details from the EGM"));
+  });
+  var ahr = by(["AHR"]);
+  if (ahr) ep.push(pl(ahr, "episode") + " of AHR noted, longest episode lasting " + val(d.ahr_longest, "ahr-longest", "duration"));
+  var af48 = by(["AF48"]);
+  if (af48) ep.push(pl(af48, "atrial episode") + " longer than 48 hours noted, " + inp("det-af48", "details from the EGM"));
+  out = out.concat(ep.length ? ep : ["No high rate episodes were noted."]);
+  out.push("Atrial burden: " + val(d.atrial_burden_percent, "burden", "%") + "%");
+  var line = function (tag) { return flags.filter(function (f) { return f.tag === tag && f.level !== "info"; }).map(function (f) { return f.title; }).join("; "); };
+  var imp = line("imp"), sen = line("sense");
+  out.push(imp ? '<span class="flagged">Lead impedance: ' + esc(imp) + "</span>" : "Lead impedance stable");
+  out.push(sen ? '<span class="flagged">Sensing/capture: ' + esc(sen) + "</span>" : "Sensing and capture within range");
+  out.push("Estimated battery longevity is " + val(d.battery.years, "batt", "#") + " years");
+  out.push("Next appointment with " + esc(d.site || T.site));
+  var extra = (d.therapies_delivered ? [d.therapies_delivered + " therapies delivered."] : []).concat(d.device_notes || []);
+  if (extra.length) out.push(esc(extra.join(" ")));
+  out.push('<select class="report-select" data-k="action">' + ACTIONS.map(function (a) { return '<option value="' + a + '">' + a + "</option>"; }).join("") + "</select>");
+  return out.join("<br>");
+}
 
 /* ---------------- Panel ---------------- */
 var CSS = [
@@ -247,7 +297,7 @@ function render(host, d, T, opt) {
     (flags.length ? "<ul>" + flags.map(function (f) {
       return '<li><span class="pill ' + f.level + '">' + (f.level === "critical" ? "Critical" : f.level === "warn" ? "Review" : "Note") + '</span><span>' + esc(f.title) + '<span class="rule">' + esc(f.rule) + "</span></span></li>";
     }).join("") + "</ul>" : "") +
-    '<div class="text-block" contenteditable="true" spellcheck="false">' + REMOTE() + '</div>' +
+    (d.recognised ? '<div class="text-block" contenteditable="true" spellcheck="false">' + template(d, flags, T) + '</div>' : "") +
     '<div class="btns"><button class="b p" data-a="copy">Copy report</button>' +
     (d.patient.name ? '<button class="b" data-a="name">Copy name</button>' : "") +
     (d.device.serial ? '<button class="b" data-a="serial">Copy serial</button>' : "") +
@@ -258,52 +308,13 @@ function render(host, d, T, opt) {
     "</div></div>";
 
   var q = function (k) { return host.querySelector('[data-k="' + k + '"]'); };
-  var setSel = function (k, val) { var s = q(k); for (var i = 0; i < s.options.length; i++) if (s.options[i].value === val) { s.selectedIndex = i; s.classList.add("prefilled"); return; } };
-  var setVal = function (k, val) { if (val == null || val === "") return; var e = q(k); e.value = String(val); e.setAttribute("value", String(val)); e.classList.add("prefilled"); };
-
-  // Fill the template
-  q("site").value = d.site || T.site || SITES[0];
-  if (d.site) q("site").classList.add("prefilled");
-  if (d.recognised) {
-    setSel("reason", REASON_OPT[d.reason] || "scheduled transmission.");
-    var map = { VT: "VHR", VF: "VHR", NSVT: "NS-VT", SVT: "SVT", AHR: "AHR" };
-    var counts = {};
-    d.episodes.forEach(function (e) { if (map[e.type]) counts[map[e.type]] = (counts[map[e.type]] || 0) + e.count; });
-    var pick = ["VHR", "NS-VT", "SVT", "AHR"].filter(function (k) { return counts[k]; })[0];
-    if (pick) { setSel("episodes", "episodes of " + pick + " noted, "); setVal("epcount", counts[pick]); }
-    if (d.atrial_burden_percent != null) setVal("burden", d.atrial_burden_percent);
-    if (d.battery.years != null) setVal("batt", d.battery.years);
-    var line = function (tag) { return flags.filter(function (f) { return f.tag === tag && f.level !== "info"; }).map(function (f) { return f.title; }).join("; "); };
-    var imp = line("imp"), sen = line("sense");
-    if (imp) { q("imp").textContent = "Lead impedance: " + imp; q("imp").classList.add("flagged"); }
-    if (sen) { q("sense").textContent = "Sensing/capture: " + sen; q("sense").classList.add("flagged"); }
-    var extra = [];
-    ["VHR", "NS-VT", "SVT", "AHR"].forEach(function (k) { if (counts[k] && k !== pick) extra.push(counts[k] + " " + k + " episode" + (counts[k] > 1 ? "s" : "")); });
-    d.episodes.forEach(function (e) { if (e.type === "AF48") extra.push(e.count + " atrial episode" + (e.count > 1 ? "s" : "") + " > 48 h"); });
-    if (d.therapies_delivered) extra.push(d.therapies_delivered + " therapies delivered");
-    var notes = d.device_notes.slice();
-    q("comment").textContent = (extra.length ? "Also noted: " + extra.join(", ") + ". " : "") + notes.join(" ");
-  }
-  var act = q("action");
-  var needs = flags.some(function (f) { return f.level !== "info"; });
-  act.selectedIndex = d.recognised && !needs ? 1 : 0;
-  var syncUi = function () {
-    var none = q("episodes").value === "No high rate episodes were noted.";
-    q("epcount-wrap").hidden = none; q("epdetail-wrap").hidden = none;
-    q("comment-wrap").hidden = !q("comment").textContent.trim();
-    act.classList.toggle("needs", act.value === "");
-  };
-  syncUi();
-  host.querySelector(".text-block").addEventListener("change", syncUi);
-  host.querySelector(".text-block").addEventListener("input", function () { q("comment-wrap").hidden = false; });
-
   var msg = function (t, err) { var m = q("msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); };
   host.querySelector(".pmr").addEventListener("click", function (e) {
     var a = e.target.getAttribute && e.target.getAttribute("data-a");
     if (!a) return;
     if (a === "close") return opt.onClose();
     if (a === "copy") {
-      if (act.value === "") { msg("Choose the action line first.", true); act.focus(); return; }
+      if (!d.recognised) return;
       copy(host, reportText(host.querySelector(".text-block")), function (ok) { msg(ok ? "Report copied." : "Copy failed: select the report text and press Ctrl+C.", !ok); });
     }
     if (a === "name") copy(host, d.patient.name, function (ok) { msg(ok ? "Name copied for the Paceart search." : "Copy failed.", !ok); });
@@ -362,6 +373,6 @@ function openOverlay(T) {
   render(host, d, T, { onClose: function () { box.remove(); } });
 }
 
-var api = { SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
+var api = { durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
 if (typeof module !== "undefined" && module.exports) module.exports = api; else root.PMRemote = api;
 })(typeof window !== "undefined" ? window : this);
