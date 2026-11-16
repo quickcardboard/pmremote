@@ -73,4 +73,5 @@ eq(e.office_date, "21 Sep 2026", "in-office date");
 eq(e.ahr_longest, "7 hours", "06:41:40 rounds to 7 hours");
 eq(e.atrial_burden_percent, 98, "burden");
 eq(P.evaluate(e, P.DEFAULTS).map((f) => f.title), ["AT/AF burden 98%"], "echo flags: P wave 0.8 ignored with burden 98%");
+eq([P.lastName("TESTPATIENT, ALPHA"), P.lastName("O'NEIL-SMITH, MARY ANN"), P.lastName("Mary Testpatient")], ["TESTPATIENT", "O'NEIL-SMITH", "Testpatient"], "last name");
 console.log("ok", n, "checks");

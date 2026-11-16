@@ -378,10 +378,16 @@ function render(host, d, T, opt) {
       var ini = (q("initials") && q("initials").value.trim()) || "";
       copy(host, reportText(host.querySelector(".text-block")) + (ini ? "\n\n" + ini : ""), function (ok) { msg(ok ? "Report copied." : "Copy failed: select the report text and press Ctrl+C.", !ok); });
     }
-    if (a === "name") copy(host, d.patient.name, function (ok) { msg(ok ? "Name copied for the Paceart search." : "Copy failed.", !ok); });
+    if (a === "name") copy(host, lastName(d.patient.name), function (ok) { msg(ok ? "Last name copied for the Paceart search." : "Copy failed.", !ok); });
     if (a === "serial") copy(host, d.device.serial, function (ok) { msg(ok ? "Serial copied for the Paceart search." : "Copy failed.", !ok); });
   });
   return { flags: flags, text: function () { return reportText(host.querySelector(".text-block")); } };
+}
+
+// LATITUDE shows "LAST, FIRST"; Paceart searches by last name. Without a comma, take the last word.
+function lastName(name) {
+  name = String(name || "").trim();
+  return name.indexOf(",") >= 0 ? name.split(",")[0].trim() : name.split(/\s+/).pop();
 }
 
 function copy(host, text, cb) {
@@ -434,6 +440,6 @@ function openOverlay(T) {
   render(host, d, T, { onClose: function () { box.remove(); } });
 }
 
-var api = { durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
+var api = { lastName: lastName, durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
 if (typeof module !== "undefined" && module.exports) module.exports = api; else root.PMRemote = api;
 })(typeof window !== "undefined" ? window : this);
