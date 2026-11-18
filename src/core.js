@@ -626,7 +626,7 @@ function template(d, flags, T) {
   out.push(sen ? '<span class="flagged">Sensing/capture: ' + esc(sen) + "</span>" : "Sensing and capture within range");
   out.push("Estimated battery longevity is " + (d.battery.text ? val(d.battery.text) : val(null, "batt", "#") + " years"));
   out.push("Next appointment with " + (d.siteChoice ? '<select class="report-select" data-k="site">' +
-    SITES.concat(d.source === "CareLink" && !d.icd ? ["Dr Tung"] : [])        // Medtronic pacemakers can also go to Dr Tung
+    ["JPOCSC", "Dr Tung"].concat(SITES.filter(function (c) { return c !== "JPOCSC"; }))   // Medtronic: JPOCSC, Dr Tung, then the rest
       .map(function (c) { return '<option value="' + c + '"' + (c === d.site ? " selected" : "") + ">" + c + "</option>"; }).join("") + "</select>" : val(d.site, "site", "clinic")));
   var extra = d.device_notes || [];
   if (extra.length) out.push(esc(extra.join(" ")));
