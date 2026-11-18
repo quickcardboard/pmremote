@@ -626,7 +626,8 @@ function template(d, flags, T) {
   out.push(sen ? '<span class="flagged">Sensing/capture: ' + esc(sen) + "</span>" : "Sensing and capture within range");
   out.push("Estimated battery longevity is " + (d.battery.text ? val(d.battery.text) : val(null, "batt", "#") + " years"));
   out.push("Next appointment with " + (d.siteChoice ? '<select class="report-select" data-k="site">' +
-    SITES.map(function (c) { return '<option value="' + c + '"' + (c === d.site ? " selected" : "") + ">" + c + "</option>"; }).join("") + "</select>" : val(d.site, "site", "clinic")));
+    SITES.concat(d.source === "CareLink" && !d.icd ? ["Dr Tung"] : [])        // Medtronic pacemakers can also go to Dr Tung
+      .map(function (c) { return '<option value="' + c + '"' + (c === d.site ? " selected" : "") + ">" + c + "</option>"; }).join("") + "</select>" : val(d.site, "site", "clinic")));
   var extra = d.device_notes || [];
   if (extra.length) out.push(esc(extra.join(" ")));
   out.push('<select class="report-select" data-k="action">' + ACTIONS.map(function (a) { return '<option value="' + a + '">' + a + "</option>"; }).join("") + "</select>");
