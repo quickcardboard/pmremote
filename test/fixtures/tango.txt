@@ -1,0 +1,62 @@
+LATITUDE™ NXT
+Logout|Help/Contact Us|Language: English|(My Profile)
+Manage Clinic
+Search Patients
+View Patient List
+ 
+Patient ID:TS900101
+Latest Device Transmission:19 Oct 2026 01:41 PDT
+Patient:TESTPATIENT, PAPADevice:L311 ACCOLADE MRI/900101Date of Birth:7 Jul 1947Age, Gender:79,Patient Group:JPOCSC Cardiac Device Clinic (Primary)Search Tags:DH ADVISORY PATIENTMonitoring Status:Monitored
+Edit/View Schedule and Alert Configuration
+Reports Menu
+(Click to Add Patient Notes)
+
+SummaryLeadsEventsPatient DiagnosticsHealthFollow-up History
+Follow-up History
+Show Alert History
+Follow-ups 1 - 4 of 4
+Device Transmission Date
+Review Reason
+New
+Alert	
+New
+Events
+Presenting
+EGM
+Dismissed By
+Dismissed
+Date
+Actions
+19 Oct 2026
+Patient Initiated
+ 	
+ 
+    
+Reports Menu
+19 Oct 2026
+Implanted Device Alert
+ 	
+ 
+    
+Clinician, Test
+19 Oct 2026
+Reports Menu
+13 Oct 2026
+Implanted Device Alert
+ 	
+ 
+    
+Clinician, Test
+13 Oct 2026
+Reports Menu
+26 Sep 2026
+Patient Initiated
+ 	
+ 
+    
+Clinician, Test
+26 Sep 2026
+Reports Menu
+Follow-ups 1 - 4 of 4
+ 
+©2026 Boston Scientific Corporation or its affiliates. All rights reserved.

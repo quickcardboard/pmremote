@@ -141,6 +141,11 @@ const nameOf = (rows) => P.parse(["Device Serial Number: X1", "Quick Look Data F
 eq([nameOf(["O'NEIL-SMITH, MARY ANN"]), nameOf(["Testpatient, Ángel"]), nameOf(["TESTPATIENT, SIERRA 2-Aug-1951 (75 yrs)"]), nameOf(["MC DONALD, JOHN A."])],
   ["O'NEIL-SMITH, MARY ANN", "Testpatient, Ángel", "TESTPATIENT, SIERRA", "MC DONALD, JOHN A."], "CareLink names: mixed case, accents, date on the same line");
 
+const tg = P.parse(fs.readFileSync(path.join(__dirname, "fixtures", "tango.txt"), "utf8"));
+eq([tg.followup_page, tg.followup_label, tg.followup_reason, tg.device.serial, tg.interrogated], [true, "Patient Initiated", "patient initiation.", "900101", "19 Oct 2026 01:41"], "Follow-up History: latest review reason");
+eq(P.parseLatitudeFollowup(P.lines("Review Reason\n16 Nov 2026\nScheduled Remote Follow-up")).reason, "scheduled transmission.", "scheduled row");
+eq(P.parseLatitudeFollowup(P.lines("Review Reason\n16 Nov 2026\nImplanted Device Alert")).reason, null, "alert row leaves the reason alone");
+
 // Alerts come from the daily value; N/R daily = no alert; low sensing within 20% of in-office = no alert
 const lead = (daily, office) => ({ chamber: "RV", daily: { amp: daily }, office: { amp: office } });
 const sense = (dl, of) => {

@@ -195,7 +195,24 @@ function parseLatitude(text) {
   var ev = parseLatitudeEvents(L);
   if (ev) { d.vhr_longest = episodeText(ev.vhr, true); d.vhr_longest_listed = ev.vhr.listed; }
   d.events_page = /Arrhythmia Logbook/i.test(J) && !d.recognised;
+  var fu = parseLatitudeFollowup(L);
+  if (fu) { d.followup_label = fu.label; d.followup_reason = fu.reason; }
+  d.followup_page = !!fu && !d.recognised && !d.events_page;
   return d;
+}
+
+// LATITUDE Follow-up History: rows start with the transmission date, then the Review Reason; the first row is the latest.
+// Only "Patient Initiated" and "Scheduled" set the reason; an alert row leaves it alone (the alert is on the Summary page).
+function parseLatitudeFollowup(L) {
+  var h = L.findIndex(function (s) { return /^Review Reason$/i.test(s); });
+  if (h < 0) return null;
+  for (var i = h + 1; i + 1 < L.length; i++) {
+    if (!new RegExp("^" + DATE + "$").test(L[i])) continue;
+    var label = L[i + 1];
+    var reason = /patient/i.test(label) ? "patient initiation." : /schedul/i.test(label) ? "scheduled transmission." : null;
+    return { label: label, date: L[i], reason: reason };
+  }
+  return null;
 }
 
 // LATITUDE Events tab rows: "V-132", "15 Oct 2026 21:03", "NonSustV", "Avg V Rate at Onset: 172 min-1", "00:00:12".
@@ -581,7 +598,7 @@ function template(d, flags, T) {
   var by = function (types) { return eps.filter(function (e) { return types.indexOf(e.type) >= 0; }).reduce(function (s, e) { return s + e.count; }, 0); };
   var out = ["Transmission received due to " + (reasonText(d) ? esc(reasonText(d)) :
     '<select class="report-select" data-k="reason">' + ["scheduled transmission.", "patient initiation.", "patient initiation, this is the first transmission"]
-      .map(function (r) { return '<option value="' + r + '">' + r + "</option>"; }).join("") + "</select>")];
+      .map(function (r) { return '<option value="' + r + '"' + (r === d.followup_reason ? " selected" : "") + ">" + r + "</option>"; }).join("") + "</select>")];
   var ep = [];
   var row = function (n, what) { return n + " " + what + (n === 1 ? " episode" : " episodes") + " noted"; };
   var vhr = by(["VT", "VF", "NSVT"]);              // VT, VF and nonsustained V together
@@ -764,7 +781,14 @@ function pageText(doc) {
 // Saved Episodes/Events-tab results, kept only for the same device and transmission
 var EP_KEY = "pmr.tab.episodes";
 function epKey(d) { return d.source + "|" + (d.device.serial || "") + "|" + (d.interrogated || ""); }
-function saveEpisodes(d) { try { localStorage.setItem(EP_KEY, JSON.stringify({ k: epKey(d), ahr: d.ahr_longest, svt: d.svt_longest, vhr: d.vhr_longest, t: Date.now() })); } catch (e) {} }
+function saveEpisodes(d) {
+  try {
+    var old = savedEpisodes(d) || {}, v = { k: epKey(d), t: Date.now() };
+    ["ahr", "svt", "vhr"].forEach(function (g) { v[g] = d[g + "_longest"] || old[g] || null; });
+    v.reason = d.followup_reason || old.reason || null;
+    localStorage.setItem(EP_KEY, JSON.stringify(v));
+  } catch (e) {}
+}
 function savedEpisodes(d) {
   try { var v = JSON.parse(localStorage.getItem(EP_KEY) || "null"); return v && v.k === epKey(d) && Date.now() - v.t < 12 * 3600e3 ? v : null; } catch (e) { return null; }
 }
@@ -848,6 +872,15 @@ function openOverlay(T) {
     if (missing >= 3) close();
   }, 1700);
 
+  if (d.followup_page) {
+    // Clicked on Follow-up History: remember the latest review reason for this transmission
+    if (d.followup_reason) saveEpisodes(d);
+    host.innerHTML = "<style>" + CSS + '</style><div class="pmr"><div class="card"><div class="top"><div class="dev">Follow-up History</div><button class="x" data-a="close" aria-label="Close">×</button></div>' +
+      '<div class="verdict ' + (d.followup_reason ? "v-ok" : "v-warn") + '">' + (d.followup_reason ? "Latest review reason: " + esc(d.followup_label) + ".<br>Saved: return to Summary and press PM Remote again."
+        : "Latest review reason: " + esc(d.followup_label) + ". Not saved: only Patient Initiated or Scheduled set the reason.") + "</div></div></div>";
+    host.querySelector('[data-a="close"]').onclick = close;
+    return;
+  }
   if (d.episodes_page || d.events_page) {
     // Clicked on the Episodes/Events tab: remember the longest episodes for this transmission
     var msgs = [];
@@ -863,8 +896,19 @@ function openOverlay(T) {
   }
   var sv = tab ? savedEpisodes(d) : null;
   if (sv) ["ahr", "svt", "vhr"].forEach(function (g) { d[g + "_longest"] = d[g + "_longest"] || sv[g]; });
+  if (sv && sv.reason) d.followup_reason = sv.reason;
   render(host, d, T, { onClose: close });
   if (!tab) return;
+  // LATITUDE with no alert: the reason (patient initiated / scheduled) comes from Follow-up History
+  var rs = host.querySelector('[data-k="reason"]');
+  if (d.source === "LATITUDE" && rs) {
+    if (d.followup_reason) rs.classList.add("prefilled");
+    else loadTab(pg.doc, /^\s*Follow-up History\s*$/, /Review Reason/i, function (t) {
+      var f = t ? parseLatitudeFollowup(lines(t)) : null;
+      if (f && f.reason && rs.isConnected && !rs.dataset.touched) { rs.value = f.reason; rs.classList.add("prefilled"); }
+    });
+    rs.addEventListener("change", function () { rs.dataset.touched = "1"; });
+  }
   // Fill the longest-episode boxes from the other tab, read in the background
   var groups = d.source === "CareLink" ? ["ahr", "svt", "vhr"] : ["vhr"];
   var slots = {};
@@ -882,6 +926,6 @@ function openOverlay(T) {
   });
 }
 
-var api = { parseLinq: parseLinq, parseLatitudeEvents: parseLatitudeEvents, pageIdent: pageIdent, parse: parse, parseCarelink: parseCarelink, cellSeconds: cellSeconds, lastName: lastName, durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
+var api = { parseLatitudeFollowup: parseLatitudeFollowup, parseLinq: parseLinq, parseLatitudeEvents: parseLatitudeEvents, pageIdent: pageIdent, parse: parse, parseCarelink: parseCarelink, cellSeconds: cellSeconds, lastName: lastName, durSeconds: durSeconds, fmtDur: fmtDur, SITES: SITES, DEFAULTS: DEFAULTS, THR_LABELS: THR_LABELS, lines: lines, parseLatitude: parseLatitude, evaluate: evaluate, render: render, reportText: reportText, openOverlay: openOverlay };
 if (typeof module !== "undefined" && module.exports) module.exports = api; else root.PMRemote = api;
 })(typeof window !== "undefined" ? window : this);
