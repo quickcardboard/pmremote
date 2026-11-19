@@ -602,14 +602,14 @@ function template(d, flags, T) {
   var ep = [];
   var row = function (n, what) { return n + " " + what + (n === 1 ? " episode" : " episodes") + " noted"; };
   var vhr = by(["VT", "VF", "NSVT"]);              // VT, VF and nonsustained V together
-  if (vhr) ep.push("<span>" + vhr + " VHR " + (vhr === 1 ? "episode" : "episodes") + " noted, longest episode is " +
+  if (vhr) ep.push("<span>" + vhr + (vhr === 1 ? " VHR episode lasting " : " VHR episodes noted, longest episode is ") +
     (d.vhr_longest ? val(d.vhr_longest) : inp("vhr-longest", "duration", "w-mid")) + "</span>");
   var svt = by(["SVT"]);
-  if (svt && d.source === "CareLink") ep.push("<span>" + svt + " SVT " + (svt === 1 ? "episode" : "episodes") + " noted, longest episode is " +
+  if (svt && d.source === "CareLink") ep.push("<span>" + svt + (svt === 1 ? " SVT episode lasting " : " SVT episodes noted, longest episode is ") +
     (d.svt_longest ? val(d.svt_longest) : inp("svt-longest", "duration", "w-mid")) + "</span>");
   else if (svt) ep.push(row(svt, "SVT"));
   var ahr = by(["AHR"]);
-  if (ahr) ep.push(ahr + " AHR " + (ahr === 1 ? "episode" : "episodes") + " noted, longest episode lasting " + (d.ahr_longest ? val(d.ahr_longest) : inp("ahr-longest", "duration", "w-mid")));
+  if (ahr) ep.push(ahr + (ahr === 1 ? " AHR episode lasting " : " AHR episodes noted, longest episode lasting ") + (d.ahr_longest ? val(d.ahr_longest) : inp("ahr-longest", "duration", "w-mid")));
   if (d.therapies_delivered && d.source !== "CareLink") ep.push(pl(d.therapies_delivered, "therapy", "therapies") + " delivered");
   out = out.concat(ep.length ? ep : ["No high rate episodes were noted."]);
   if (d.source === "CareLink" && d.icd)
